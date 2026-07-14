@@ -1,6 +1,8 @@
 // Google Gemini adapter (Generative Language API). Default AI provider.
 
-const MODEL = 'gemini-2.5-flash';
+// 'latest' alias so this doesn't silently break when Google retires a
+// pinned version (as happened with gemini-2.5-flash for new API keys).
+const MODEL = 'gemini-flash-latest';
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 export async function sendMessage({ apiKey, systemPrompt, messages, image }) {
