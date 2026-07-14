@@ -504,7 +504,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding-bottom: 12px;
+  padding-bottom: 76px;
 }
 
 .chat-bubble {
@@ -538,12 +538,16 @@ textarea {
 }
 
 .chat-input-bar {
-  position: sticky;
-  bottom: 0;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--nav-height);
   display: flex;
   gap: 8px;
-  padding-top: 10px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
   background: var(--bg);
+  border-top: 1px solid var(--border);
+  z-index: 15;
 }
 
 .chat-input-bar textarea {
@@ -579,6 +583,67 @@ textarea {
 
 .ai-setup {
   padding: 30px 10px;
+}
+
+.cleanup-btn-row {
+  margin-bottom: 14px;
+}
+
+.suggestion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 24px;
+}
+
+.suggestion-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+.suggestion-card.applied {
+  opacity: 0.55;
+}
+
+.suggestion-item-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.suggestion-mini-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.suggestion-mini-item img {
+  width: 34px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.suggestion-issue {
+  font-size: 13px;
+  color: var(--text);
+  margin: 0 0 4px;
+}
+
+.suggestion-change {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 0 0 10px;
+}
+
+.suggestion-change strong {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .ai-setup p {

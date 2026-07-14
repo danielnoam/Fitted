@@ -13,6 +13,7 @@ const TABS = {
 const viewRoot = document.getElementById('view-root');
 const topbarTitle = document.getElementById('topbar-title');
 const navButtons = document.querySelectorAll('.nav-btn');
+const fabCapture = document.getElementById('fab-capture');
 
 let currentTab = 'wardrobe';
 
@@ -20,6 +21,7 @@ async function renderTab(tab) {
   currentTab = tab;
   topbarTitle.textContent = TABS[tab].title;
   navButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.tab === tab));
+  fabCapture.style.display = tab === 'wardrobe' ? '' : 'none';
   await TABS[tab].view.render(viewRoot);
 }
 
