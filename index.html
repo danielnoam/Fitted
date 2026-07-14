@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Fitted</title>
+  <meta name="theme-color" content="#121212" />
+  <meta name="description" content="Fitted — photograph your wardrobe and get deterministic outfit pairing suggestions." />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <h1 id="topbar-title">Fitted</h1>
+    </header>
+
+    <main id="view-root" aria-live="polite"></main>
+
+    <button id="fab-capture" class="fab" title="Add item" aria-label="Add item">+</button>
+
+    <nav class="bottom-nav" id="bottom-nav">
+      <button class="nav-btn" data-tab="wardrobe">
+        <span class="nav-icon">👕</span>
+        <span>Wardrobe</span>
+      </button>
+      <button class="nav-btn" data-tab="suggest">
+        <span class="nav-icon">✨</span>
+        <span>Suggest</span>
+      </button>
+      <button class="nav-btn" data-tab="ai">
+        <span class="nav-icon">💬</span>
+        <span>AI</span>
+      </button>
+    </nav>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
