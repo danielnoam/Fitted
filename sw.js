@@ -1,4 +1,5 @@
-const CACHE_NAME = 'fitted-cache-v1';
+// Kept in step with js/version.js so each deploy busts old caches.
+const CACHE_NAME = 'fitted-cache-2026.07.14-2022';
 
 const PRECACHE_URLS = [
   './',
@@ -6,6 +7,7 @@ const PRECACHE_URLS = [
   './manifest.json',
   './css/style.css',
   './js/main.js',
+  './js/version.js',
   './js/camera.js',
   './js/imageProcess.js',
   './js/colorMatch.js',

@@ -2,6 +2,7 @@ import * as wardrobeView from './ui/wardrobeView.js';
 import * as suggestView from './ui/suggestView.js';
 import * as aiChatView from './ui/aiChatView.js';
 import { openCapture } from './ui/captureView.js';
+import { VERSION } from './version.js';
 
 const TABS = {
   wardrobe: { title: 'Wardrobe', view: wardrobeView },
@@ -35,6 +36,8 @@ document.addEventListener('fitted:wardrobe-changed', () => {
 document.addEventListener('fitted:switch-tab', (e) => {
   renderTab(e.detail.tab);
 });
+
+document.getElementById('app-version').textContent = VERSION;
 
 renderTab('wardrobe');
 
