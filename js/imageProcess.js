@@ -1,6 +1,8 @@
 // Canvas-based image resize, dominant color extraction, and pattern detection.
 // All client-side, no network calls.
 
+import { rgbToHsl, isNeutral, hueDistance } from './colorMatch.js';
+
 const THUMB_MAX_DIM = 300;
 const THUMB_QUALITY = 0.7;
 
@@ -111,13 +113,17 @@ export function extractDominantColors(imageData, n = 3) {
 }
 
 /**
- * Detect solid vs. patterned via local pixel variance (edge density proxy).
- * Downsamples to a small grid, computes gradient magnitude between
- * neighboring cells, and thresholds the average against a fixed cutoff.
+ * Detect solid vs. patterned via local hue/lightness variance between
+ * neighboring grid cells. Hue-led rather than raw-RGB-led on purpose:
+ * fabric shadows and folds shift lightness a lot but barely shift hue, so
+ * weighting hue heavily (and lightness lightly) keeps ordinary lighting on
+ * a solid garment from reading as "patterned". A genuine print/stripe/check
+ * still shows up as neighboring cells with clearly different hues (or a
+ * strong color-vs-neutral contrast, e.g. navy against a white stripe).
  */
 export function detectPattern(imageData) {
   const { data, width, height } = imageData;
-  const GRID = 24; // sample grid resolution
+  const GRID = 20; // sample grid resolution
   const cellW = Math.max(1, Math.floor(width / GRID));
   const cellH = Math.max(1, Math.floor(height / GRID));
 
@@ -141,13 +147,42 @@ export function detectPattern(imageData) {
           count++;
         }
       }
-      row.push(count ? [rSum / count, gSum / count, bSum / count] : null);
+      row.push(count ? rgbToHsl(rSum / count, gSum / count, bSum / count) : null);
     }
     grid.push(row);
   }
 
-  let diffSum = 0;
-  let diffCount = 0;
+  function cellDiff(a, b) {
+    const neutralA = isNeutral(a);
+    const neutralB = isNeutral(b);
+    const lightDiff = Math.abs(a.l - b.l);
+
+    if (!neutralA && !neutralB) {
+      // Two colored cells: real hue contrast is the strongest pattern signal;
+      // lightness contributes lightly since shading alone can still vary it.
+      return (hueDistance(a.h, b.h) / 180) * 0.75 + lightDiff * 0.25;
+    }
+    if (neutralA !== neutralB) {
+      // One colored, one neutral (e.g. a white/black stripe against a
+      // colored ground) - a real contrast, but keep it below the max so an
+      // isolated flash glare or shadow doesn't dominate the average alone.
+      return 0.55 + lightDiff * 0.2;
+    }
+    // Both neutral/gray-ish: only lightness to go on. Ordinary shading is a
+    // gentle gradient; a true black/white pattern is a sharp jump - weight
+    // accordingly rather than flagging every shadow.
+    return lightDiff * 0.7;
+  }
+
+  // Count what fraction of neighboring pairs look like a real edge, rather
+  // than averaging all pairs. A plain average gets diluted whenever the
+  // pattern's repeat size doesn't line up neatly with the sample grid (a
+  // checkerboard can have most cell-pairs fall inside one square), while a
+  // handful of true edges still reliably show up as a real fraction of
+  // pairs - unlike an isolated lighting artifact, which stays a rare outlier.
+  const EDGE_DIFF = 0.32;
+  let edgeCount = 0;
+  let pairCount = 0;
   for (let gy = 0; gy < GRID; gy++) {
     for (let gx = 0; gx < GRID; gx++) {
       const cell = grid[gy][gx];
@@ -156,17 +191,13 @@ export function detectPattern(imageData) {
       const down = gy + 1 < GRID ? grid[gy + 1][gx] : null;
       for (const neighbor of [right, down]) {
         if (!neighbor) continue;
-        const d =
-          Math.abs(cell[0] - neighbor[0]) +
-          Math.abs(cell[1] - neighbor[1]) +
-          Math.abs(cell[2] - neighbor[2]);
-        diffSum += d;
-        diffCount++;
+        if (cellDiff(cell, neighbor) > EDGE_DIFF) edgeCount++;
+        pairCount++;
       }
     }
   }
 
-  const avgDiff = diffCount ? diffSum / diffCount : 0;
-  const PATTERN_THRESHOLD = 18; // empirical cutoff on avg per-channel-sum diff
-  return avgDiff > PATTERN_THRESHOLD ? 'patterned' : 'solid';
+  const edgeFraction = pairCount ? edgeCount / pairCount : 0;
+  const PATTERN_THRESHOLD = 0.1; // >=10% of neighbor pairs look like real edges
+  return edgeFraction > PATTERN_THRESHOLD ? 'patterned' : 'solid';
 }
