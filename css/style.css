@@ -537,6 +537,25 @@ textarea {
   color: var(--danger);
 }
 
+.chat-bubble code {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.9em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.chat-bubble.user code {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.chat-bubble.pending {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+}
+
 .chat-input-bar {
   position: fixed;
   left: 0;

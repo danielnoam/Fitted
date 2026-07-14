@@ -125,7 +125,7 @@ function renderChat(container, provider, apiKey) {
     container.querySelector('#chat-send').disabled = true;
 
     thread.push({ role: 'user', content: text });
-    renderThreadOnly(container, thread, focused);
+    renderThreadOnly(container, thread, focused, true);
 
     try {
       const systemPrompt = await buildSystemPrompt(focused?.item);
@@ -155,9 +155,13 @@ function renderChat(container, provider, apiKey) {
   });
 }
 
-function renderThreadOnly(container, thread, focused) {
+function renderThreadOnly(container, thread, focused, pending = false) {
   const threadEl = container.querySelector('#chat-thread');
-  threadEl.innerHTML = thread.length ? thread.map(chatBubbleHtml).join('') : emptyThreadHtml(focused);
+  const bubbles = thread.map(chatBubbleHtml).join('');
+  const pendingHtml = pending
+    ? `<div class="chat-bubble assistant pending"><span class="spinner"></span> Thinking…</div>`
+    : '';
+  threadEl.innerHTML = thread.length || pending ? bubbles + pendingHtml : emptyThreadHtml(focused);
   threadEl.scrollTop = threadEl.scrollHeight;
 }
 
@@ -179,13 +183,25 @@ function emptyThreadHtml(focused) {
 
 function chatBubbleHtml(msg) {
   const cls = msg.isError ? 'error' : msg.role;
-  return `<div class="chat-bubble ${cls}">${escapeHtml(msg.content)}</div>`;
+  return `<div class="chat-bubble ${cls}">${renderInlineMarkdown(msg.content)}</div>`;
 }
 
 function escapeHtml(s) {
   const div = document.createElement('div');
   div.textContent = s;
   return div.innerHTML;
+}
+
+// Minimal inline markdown -> HTML for chat replies: bold, italic, inline
+// code. Escapes first so nothing in the source text can inject markup.
+function renderInlineMarkdown(text) {
+  let html = escapeHtml(text);
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  html = html.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+  html = html.replace(/_([^_\n]+)_/g, '<em>$1</em>');
+  return html;
 }
 
 async function buildSystemPrompt(focusedItem) {
