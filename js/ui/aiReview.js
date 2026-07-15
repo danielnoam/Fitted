@@ -5,6 +5,8 @@
 
 import { updateItem } from '../storage.js';
 import { sendMessageWithFallback, getAiConfig, hasPrimaryKey } from '../ai/aiRouter.js';
+import { MAX_SUBCATEGORY_LENGTH } from '../constants.js';
+import { escapeHtml } from '../domUtil.js';
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;
 
@@ -66,8 +68,9 @@ function renderReviewResult(resultEl, item, parsed, onChange) {
   }
 
   const fieldFixes = [];
-  if (typeof parsed.subCategory === 'string' && parsed.subCategory.trim() && parsed.subCategory.trim() !== item.subCategory) {
-    fieldFixes.push({ field: 'subCategory', label: 'Sub-category', current: item.subCategory || '(none)', suggested: parsed.subCategory.trim() });
+  const suggestedSubCategory = typeof parsed.subCategory === 'string' ? parsed.subCategory.trim().slice(0, MAX_SUBCATEGORY_LENGTH) : '';
+  if (suggestedSubCategory && suggestedSubCategory !== item.subCategory) {
+    fieldFixes.push({ field: 'subCategory', label: 'Sub-category', current: item.subCategory || '(none)', suggested: suggestedSubCategory });
   }
   if ((parsed.pattern === 'solid' || parsed.pattern === 'patterned') && parsed.pattern !== item.pattern) {
     fieldFixes.push({ field: 'pattern', label: 'Pattern', current: item.pattern, suggested: parsed.pattern });
@@ -148,10 +151,4 @@ function colorCardHtml(current, suggested) {
 function markCardApplied(card) {
   card.classList.add('applied');
   card.querySelectorAll('button').forEach((b) => (b.disabled = true));
-}
-
-function escapeHtml(s) {
-  const div = document.createElement('div');
-  div.textContent = s;
-  return div.innerHTML;
 }

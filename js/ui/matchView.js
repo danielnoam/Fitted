@@ -2,6 +2,7 @@ import { getAllItems } from '../storage.js';
 import { findMatches } from '../matcher.js';
 import { explainMatch } from '../explain.js';
 import { renderSwatches, openItemDetail } from './wardrobeView.js';
+import { escapeHtml, revokeBlobImagesOnLoad } from '../domUtil.js';
 
 /**
  * Show ranked matches for a target item as a full-screen overlay.
@@ -39,6 +40,7 @@ export async function openMatchResults(target) {
   }
 
   body.innerHTML = `<div class="match-list">${results.map((r) => matchRowHtml(target, r)).join('')}</div>`;
+  revokeBlobImagesOnLoad(body);
 
   body.querySelectorAll('.match-row').forEach((row) => {
     row.addEventListener('click', () => {
@@ -50,14 +52,14 @@ export async function openMatchResults(target) {
   });
 }
 
-function matchRowHtml(target, result) {
+export function matchRowHtml(target, result) {
   const thumbUrl = URL.createObjectURL(result.item.thumbnail);
   const pct = Math.round(result.score * 100);
   return `
     <div class="match-row" data-id="${result.item.id ?? ''}">
       <div class="thumb-wrap"><img src="${thumbUrl}" alt="${result.item.category}" /></div>
       <div class="match-info">
-        <div class="category-badge">${result.item.category}${result.item.subCategory ? ' · ' + result.item.subCategory : ''}</div>
+        <div class="category-badge">${escapeHtml(result.item.category)}${result.item.subCategory ? ' · ' + escapeHtml(result.item.subCategory) : ''}</div>
         <div class="swatch-row" style="margin-bottom:4px;">${renderSwatches(result.item.dominantColors)}</div>
         <div class="match-why">${explainMatch(target, result)}</div>
       </div>

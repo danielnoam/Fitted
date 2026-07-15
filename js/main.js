@@ -22,7 +22,17 @@ async function renderTab(tab) {
   topbarTitle.textContent = TABS[tab].title;
   navButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.tab === tab));
   fabCapture.style.display = tab === 'wardrobe' ? '' : 'none';
-  await TABS[tab].view.render(viewRoot);
+  try {
+    await TABS[tab].view.render(viewRoot);
+  } catch (err) {
+    console.error(`Failed to render the ${tab} tab:`, err);
+    viewRoot.innerHTML = `
+      <div class="empty-state">
+        <span class="empty-emoji">⚠️</span>
+        Something went wrong loading this tab. Try switching tabs or reloading the app.
+      </div>
+    `;
+  }
 }
 
 navButtons.forEach((btn) => {

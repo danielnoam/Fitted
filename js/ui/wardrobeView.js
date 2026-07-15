@@ -5,8 +5,8 @@ import { formalityFieldHtml, wireFormalityField } from './formalityField.js';
 import { wireAiReview } from './aiReview.js';
 import { pickImage } from '../camera.js';
 import { processImageFile } from '../imageProcess.js';
-
-const CATEGORIES = ['top', 'bottom', 'outerwear', 'shoes', 'accessory'];
+import { escapeHtml, revokeBlobImagesOnLoad } from '../domUtil.js';
+import { CATEGORIES } from '../constants.js';
 
 let activeFilter = 'all';
 
@@ -23,7 +23,7 @@ export function itemCardHtml(item) {
     <button class="item-card" data-id="${item.id}">
       <div class="thumb-wrap"><img src="${thumbUrl}" alt="${item.category}" /></div>
       <div class="card-body">
-        <span class="category-badge">${item.category}${item.subCategory ? ' · ' + item.subCategory : ''}</span>
+        <span class="category-badge">${escapeHtml(item.category)}${item.subCategory ? ' · ' + escapeHtml(item.subCategory) : ''}</span>
         <div class="swatch-row">${renderSwatches(item.dominantColors)}</div>
       </div>
     </button>
@@ -80,6 +80,7 @@ function renderGrid(container, items) {
   }
 
   grid.innerHTML = `<div class="card-grid">${filtered.map(itemCardHtml).join('')}</div>`;
+  revokeBlobImagesOnLoad(grid);
   grid.querySelectorAll('.item-card').forEach((card) => {
     card.addEventListener('click', () => {
       const item = items.find((i) => i.id === card.dataset.id);
@@ -103,7 +104,7 @@ export function openItemDetail(item, { onChange } = {}) {
       <div class="detail-thumb"><img src="${thumbUrl}" alt="${item.category}" /></div>
       <div class="detail-meta-row">
         <span class="pill">${item.pattern}</span>
-        ${item.subCategory ? `<span class="pill">${item.subCategory}</span>` : ''}
+        ${item.subCategory ? `<span class="pill">${escapeHtml(item.subCategory)}</span>` : ''}
       </div>
       <div class="detail-meta-row">${renderSwatches(item.dominantColors, 'lg')}</div>
       ${item.notes ? `<p style="color:var(--text-dim);font-size:14px;">${escapeHtml(item.notes)}</p>` : ''}
@@ -129,6 +130,7 @@ export function openItemDetail(item, { onChange } = {}) {
   `;
 
   document.body.appendChild(overlay);
+  revokeBlobImagesOnLoad(overlay);
 
   // Closes and reopens the detail overlay so the thumbnail/pills/swatches
   // reflect whatever an AI review or retake just changed on `item`.
@@ -190,10 +192,4 @@ export function openItemDetail(item, { onChange } = {}) {
     overlay.remove();
     onChange?.();
   });
-}
-
-function escapeHtml(s) {
-  const div = document.createElement('div');
-  div.textContent = s;
-  return div.innerHTML;
 }

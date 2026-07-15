@@ -3,8 +3,8 @@ import { processImageFile } from '../imageProcess.js';
 import { addItem, uuid } from '../storage.js';
 import { openMatchResults } from './matchView.js';
 import { formalityFieldHtml, wireFormalityField } from './formalityField.js';
-
-const CATEGORIES = ['top', 'bottom', 'outerwear', 'shoes', 'accessory'];
+import { revokeBlobImagesOnLoad } from '../domUtil.js';
+import { CATEGORIES, MAX_SUBCATEGORY_LENGTH, MAX_NOTES_LENGTH } from '../constants.js';
 
 /**
  * Opens the capture overlay: picks an image, analyzes it, then lets the
@@ -65,14 +65,14 @@ function renderForm(overlay, file, analysis) {
 
     <div class="field">
       <label for="cap-subcategory">Sub-category (optional)</label>
-      <input type="text" id="cap-subcategory" placeholder="e.g. t-shirt, sneakers" />
+      <input type="text" id="cap-subcategory" placeholder="e.g. t-shirt, sneakers" maxlength="${MAX_SUBCATEGORY_LENGTH}" />
     </div>
 
     ${formalityFieldHtml('cap', null)}
 
     <div class="field">
       <label for="cap-notes">Notes (optional)</label>
-      <textarea id="cap-notes" placeholder="Anything worth remembering about this piece"></textarea>
+      <textarea id="cap-notes" placeholder="Anything worth remembering about this piece" maxlength="${MAX_NOTES_LENGTH}"></textarea>
     </div>
 
     <div id="cap-error" style="color:var(--danger);font-size:13px;margin-bottom:10px;display:none;">
@@ -87,6 +87,8 @@ function renderForm(overlay, file, analysis) {
     </div>
   `;
 
+  revokeBlobImagesOnLoad(body);
+
   const getCategory = () => body.querySelector('#cap-category').value;
   const showError = () => {
     body.querySelector('#cap-error').style.display = 'block';
@@ -97,12 +99,12 @@ function renderForm(overlay, file, analysis) {
   function buildItem() {
     return {
       category: getCategory(),
-      subCategory: body.querySelector('#cap-subcategory').value.trim(),
+      subCategory: body.querySelector('#cap-subcategory').value.trim().slice(0, MAX_SUBCATEGORY_LENGTH),
       thumbnail: analysis.thumbnail,
       dominantColors: analysis.dominantColors,
       pattern: analysis.pattern,
       formality: body.querySelector('#cap-formality').value || null,
-      notes: body.querySelector('#cap-notes').value.trim(),
+      notes: body.querySelector('#cap-notes').value.trim().slice(0, MAX_NOTES_LENGTH),
     };
   }
 

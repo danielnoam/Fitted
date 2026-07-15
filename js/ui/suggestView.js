@@ -4,6 +4,7 @@ import { explainMatch } from '../explain.js';
 import { itemCardHtml, openItemDetail } from './wardrobeView.js';
 import { openMatchResults } from './matchView.js';
 import { openCapture } from './captureView.js';
+import { revokeBlobImagesOnLoad } from '../domUtil.js';
 
 export async function render(container) {
   container.innerHTML = `
@@ -61,6 +62,7 @@ async function runSurprise(container) {
       <button class="btn btn-primary btn-block" id="suggest-more">See more matches</button>
     </div>
   `;
+  revokeBlobImagesOnLoad(resultEl);
 
   resultEl.querySelectorAll('.item-card').forEach((card, idx) => {
     card.addEventListener('click', () => {

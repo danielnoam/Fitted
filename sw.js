@@ -1,5 +1,5 @@
 // Kept in step with js/version.js so each deploy busts old caches.
-const CACHE_NAME = 'fitted-cache-v8';
+const CACHE_NAME = 'fitted-cache-v9';
 
 const PRECACHE_URLS = [
   './',
@@ -9,6 +9,8 @@ const PRECACHE_URLS = [
   './js/main.js',
   './js/version.js',
   './js/camera.js',
+  './js/constants.js',
+  './js/domUtil.js',
   './js/imageProcess.js',
   './js/colorMatch.js',
   './js/matcher.js',

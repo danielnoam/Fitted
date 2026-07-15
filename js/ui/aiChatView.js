@@ -1,8 +1,8 @@
 import { getAllItems, updateItem, deleteItem } from '../storage.js';
 import { sendMessageWithFallback, getAiConfig, setAiConfig, hasPrimaryKey, PROVIDERS, DEFAULT_PROVIDER } from '../ai/aiRouter.js';
+import { escapeHtml, revokeBlobImagesOnLoad } from '../domUtil.js';
+import { CATEGORIES, PATTERNS, MAX_SUBCATEGORY_LENGTH, MAX_NOTES_LENGTH } from '../constants.js';
 
-const CATEGORIES = ['top', 'bottom', 'outerwear', 'shoes', 'accessory'];
-const PATTERNS = ['solid', 'patterned'];
 const FIXABLE_FIELDS = ['category', 'subCategory', 'pattern', 'notes'];
 
 const generalThread = { messages: [] };
@@ -139,6 +139,7 @@ function renderChat(container, config) {
 
   const threadEl = container.querySelector('#chat-thread');
   threadEl.scrollTop = threadEl.scrollHeight;
+  revokeBlobImagesOnLoad(container);
 
   container.querySelector('#ai-settings')?.addEventListener('click', () => {
     renderSettings(container, config);
@@ -208,7 +209,7 @@ function itemContextHtml(item) {
   return `
     <div class="chat-item-context">
       <img src="${thumbUrl}" alt="${item.category}" />
-      <span>Asking about your ${item.subCategory || item.category}</span>
+      <span>Asking about your ${escapeHtml(item.subCategory || item.category)}</span>
     </div>
   `;
 }
@@ -222,12 +223,6 @@ function emptyThreadHtml(focused) {
 function chatBubbleHtml(msg) {
   const cls = msg.isError ? 'error' : msg.role;
   return `<div class="chat-bubble ${cls}">${renderInlineMarkdown(msg.content)}</div>`;
-}
-
-function escapeHtml(s) {
-  const div = document.createElement('div');
-  div.textContent = s;
-  return div.innerHTML;
 }
 
 // Minimal inline markdown -> HTML for chat replies: bold, italic, inline
@@ -354,6 +349,8 @@ function isValidFieldFix(s) {
   if (typeof s.suggestedValue !== 'string' || !s.suggestedValue.trim()) return false;
   if (s.field === 'category' && !CATEGORIES.includes(s.suggestedValue)) return false;
   if (s.field === 'pattern' && !PATTERNS.includes(s.suggestedValue)) return false;
+  if (s.field === 'subCategory' && s.suggestedValue.length > MAX_SUBCATEGORY_LENGTH) return false;
+  if (s.field === 'notes' && s.suggestedValue.length > MAX_NOTES_LENGTH) return false;
   return true;
 }
 
@@ -366,6 +363,7 @@ function renderSuggestions(el, suggestions, items) {
   el.innerHTML = `<div class="suggestion-list">${suggestions
     .map((s, i) => suggestionCardHtml(s, items, i))
     .join('')}</div>`;
+  revokeBlobImagesOnLoad(el);
 
   suggestions.forEach((s, i) => {
     const card = el.querySelector(`[data-suggestion="${i}"]`);
@@ -410,7 +408,7 @@ function miniItemHtml(item) {
   return `
     <div class="suggestion-mini-item">
       <img src="${thumbUrl}" alt="${item.category}" />
-      <span>${item.category}${item.subCategory ? ' · ' + item.subCategory : ''}</span>
+      <span>${escapeHtml(item.category)}${item.subCategory ? ' · ' + escapeHtml(item.subCategory) : ''}</span>
     </div>
   `;
 }
