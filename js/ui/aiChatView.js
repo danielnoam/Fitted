@@ -2,6 +2,7 @@ import { getAllItems, updateItem, deleteItem, addItem } from '../storage.js';
 import { sendMessageWithFallback, getAiConfig, setAiConfig, hasPrimaryKey, PROVIDERS, DEFAULT_PROVIDER } from '../ai/aiRouter.js';
 import { escapeHtml, revokeBlobImagesOnLoad, showUndoToast } from '../domUtil.js';
 import { CATEGORIES, PATTERNS, MAX_SUBCATEGORY_LENGTH, MAX_NOTES_LENGTH } from '../constants.js';
+import { formatRelativeDate } from '../dateUtil.js';
 
 /** Dispatched whenever the AI tab starts/stops waiting on a provider reply,
  * so main.js can badge the nav tab if the user has navigated away. */
@@ -23,6 +24,15 @@ function notifyAiContentUpdated() {
 }
 
 const FIXABLE_FIELDS = ['category', 'subCategory', 'pattern', 'notes'];
+
+// Quick actions: canned prompts a tap sends straight into general chat, so
+// getting a useful answer doesn't depend on knowing what to type. Shown
+// only in the empty general-chat state (not per-item chat, and not once a
+// conversation is already underway).
+const QUICK_ACTION_PROMPTS = {
+  missing: 'Looking at my whole wardrobe, what key pieces or categories seem to be missing that would round it out? Keep it to at most 3-4 concise, specific suggestions.',
+  unworn: "Based on the wardrobe list above (including last-worn info), which items haven't been worn in a while and could use more rotation? Keep it brief - call out a handful of specific items, not a generic answer.",
+};
 
 const generalThread = { messages: [], pending: false };
 const itemThreads = new Map(); // itemId -> { item, messages: [], imageSent: bool, pending: bool }
@@ -148,7 +158,7 @@ function renderChat(container, config) {
     <div class="chat-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <button class="btn" id="ai-settings">${PROVIDERS[config.primary.provider]?.label ?? config.primary.provider}</button>
       <div style="display:flex;gap:8px;">
-        ${focused ? '<button class="btn" id="ai-back">← General chat</button>' : '<button class="btn" id="ai-cleanup">🧹 Clean up wardrobe</button>'}
+        ${focused ? '<button class="btn" id="ai-back">← General chat</button>' : '<button class="btn" id="ai-cleanup">🧹 Find data mistakes</button>'}
       </div>
     </div>
     ${focused ? itemContextHtml(focused.item) : ''}
@@ -228,6 +238,13 @@ function renderChat(container, config) {
       send();
     }
   });
+
+  container.querySelectorAll('#ai-quick-actions .chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      input.value = QUICK_ACTION_PROMPTS[chip.dataset.quick] || '';
+      send();
+    });
+  });
 }
 
 function renderThreadOnly(container, thread, focused, pending = false) {
@@ -253,9 +270,19 @@ function itemContextHtml(item) {
 }
 
 function emptyThreadHtml(focused) {
+  if (focused) {
+    return `<div class="empty-state" style="padding:30px 10px;">
+      <span class="empty-emoji" aria-hidden="true">💬</span>
+      Ask anything about this piece — styling ideas, care tips, what to pair it with.
+    </div>`;
+  }
   return `<div class="empty-state" style="padding:30px 10px;">
     <span class="empty-emoji" aria-hidden="true">💬</span>
-    ${focused ? 'Ask anything about this piece — styling ideas, care tips, what to pair it with.' : 'Ask what to wear, what you\'re missing, or how to organize your wardrobe.'}
+    Ask what to wear, what you're missing, or how to organize your wardrobe.
+    <div class="chip-row" id="ai-quick-actions" style="justify-content:center;margin-top:14px;">
+      <button type="button" class="chip" data-quick="missing">🕳️ What am I missing?</button>
+      <button type="button" class="chip" data-quick="unworn">🧺 What haven't I worn?</button>
+    </div>
   </div>`;
 }
 
@@ -282,7 +309,8 @@ async function buildSystemPrompt(focusedItem) {
     .map((i) => {
       const colors = (i.dominantColors || []).map((c) => c.hex).join(',');
       const bits = [i.category, i.subCategory, colors, i.pattern].filter(Boolean).join(' | ');
-      return `- ${bits}${i.notes ? ` | notes: ${i.notes}` : ''}`;
+      const lastWorn = i.lastWorn ? `last worn: ${formatRelativeDate(i.lastWorn)}` : 'never logged as worn';
+      return `- ${bits} | ${lastWorn}${i.notes ? ` | notes: ${i.notes}` : ''}`;
     })
     .join('\n');
 
@@ -302,11 +330,11 @@ async function renderCleanup(container, config) {
       <span class="pill">${PROVIDERS[config.primary.provider]?.label ?? config.primary.provider}</span>
       <button class="btn" id="cleanup-back">← Back to chat</button>
     </div>
-    <p class="section-title">Clean up wardrobe</p>
+    <p class="section-title">Find data mistakes</p>
     <p style="color:var(--text-dim);font-size:13px;margin-top:-6px;">
-      Reviews the category, colors, pattern and notes you've recorded for each item
-      (it can't re-look at the photos) and flags things worth fixing. Nothing changes
-      until you tap Apply on a suggestion.
+      Checks the category, colors, pattern, and notes you've recorded for each
+      item against each other (it can't re-look at the photos) and flags likely
+      typos or duplicate entries. Nothing changes until you tap Apply.
     </p>
     <div class="btn-row cleanup-btn-row">
       <button class="btn btn-primary btn-block" id="cleanup-scan" ${cleanupPending ? 'disabled' : ''}>${lastCleanupSuggestions ? 'Re-scan wardrobe' : 'Scan wardrobe'}</button>

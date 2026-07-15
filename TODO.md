@@ -150,6 +150,19 @@ Run with `npm test` (Node's built-in `node:test` runner, no build step).
       AI opinion via a later "Re-check". Shares `aiReview.js`'s prompt/
       parsing logic (now exported as `fetchAiSuggestions`) with an
       `includeCategory` option, since an unsaved item has no category yet.
+- [x] Renamed the unclear "🧹 Clean up wardrobe" button to "🧹 Find data
+      mistakes" (both the chat-header button and the mode's own section
+      title) — it audits recorded category/subCategory/pattern/notes for
+      typos and duplicates, not the physical wardrobe, and the old name
+      didn't say that.
+- [x] Added a couple of one-tap "quick action" chips to the empty general
+      chat state, so getting a useful answer doesn't require knowing what
+      to type: "🕳️ What am I missing?" and "🧺 What haven't I worn?" (the
+      wardrobe summary sent to the AI now includes each item's `lastWorn`
+      info, so the latter can actually answer meaningfully). Tapping one
+      sends the canned prompt straight into chat via the normal `send()`
+      path, so it gets the same pending/thinking-badge handling as typing
+      it by hand.
 
 ## Also considered, not queued
 
