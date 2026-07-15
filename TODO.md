@@ -75,14 +75,34 @@ Run with `npm test` (Node's built-in `node:test` runner, no build step).
 
 ### Quality/UX polish
 
-- [ ] Consistent empty/loading states across the app — the `#suggest-more`
-      flow and AI settings screen should use the same skeleton/loading
-      treatment already used elsewhere.
-- [ ] Undo for delete — item deletion (wardrobe detail, cleanup-scan
-      duplicates) is immediate behind only a `confirm()`; add a brief "Undo"
-      toast, especially since there's no export/backup yet.
-- [ ] Accessibility pass — color-swatch-only UI (category badges, formality
-      pills) needs more than a hover `title` for touch/screen-reader users.
+- [x] Consistent empty/loading states across the app — `aiChatView.js`'s
+      `render()` now shows a loading row immediately instead of awaiting
+      `getAiConfig()` before touching the DOM at all (previously the only
+      view that let the *previous* tab's content flash while it loaded).
+      Also added the `empty-emoji` icon to five empty-states that were
+      missing it (chat empty thread, cleanup "add items first", AI review
+      "couldn't parse", capture "couldn't read photo", surprise "no
+      compatible pairing") for consistency with every other empty-state.
+- [x] Undo for delete — wardrobe item detail delete and the cleanup-scan
+      duplicate delete both now delete immediately (no blocking `confirm()`)
+      and show a 5-second "Undo" toast (`domUtil.js`'s `showUndoToast`) that
+      re-adds the item if pressed.
+- [x] Accessibility pass — color swatches (`renderSwatches`, the capture-form
+      preview, and the AI-review color-suggestion cards) were bare
+      `<span>`s with only a hover `title`, so screen readers announced
+      nothing and touch users got no tooltip at all; they now carry
+      `role="img"` + an `aria-label` built from `colorFamily()` (e.g. "red
+      swatch, #ff0000"). Also marked all purely-decorative emoji (nav icons,
+      mode-card icons, empty-state icons) `aria-hidden="true"` so screen
+      readers don't announce redundant glyphs next to their adjacent text.
+- [x] AI-thinking nav badge — while the AI tab is waiting on a provider
+      reply (chat send or wardrobe-cleanup scan) and the user has navigated
+      to another tab, a small pulsing dot appears on the AI nav icon
+      (`fitted:ai-thinking` event, wired in `main.js`). Also fixed a latent
+      bug this surfaced: replying while the chat view had been navigated
+      away from and its DOM replaced would throw (`renderThreadOnly` on a
+      detached `#chat-thread`); both `send()` and `renderThreadOnly` now
+      guard against that.
 
 ### Technical
 

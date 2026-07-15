@@ -31,3 +31,25 @@ export function showToast(message) {
   document.body.appendChild(toast);
   setTimeout(() => toast.remove(), 2200);
 }
+
+const UNDO_WINDOW_MS = 5000;
+
+/**
+ * Shows a toast with an "Undo" button for a grace period after a delete,
+ * since the app has no other backup/export path yet. `onUndo` is only
+ * called if the button is pressed before the toast times out.
+ */
+export function showUndoToast(message, onUndo) {
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-undo';
+  toast.innerHTML = `<span></span><button type="button" class="toast-undo-btn">Undo</button>`;
+  toast.querySelector('span').textContent = message;
+  document.body.appendChild(toast);
+
+  const timer = setTimeout(() => toast.remove(), UNDO_WINDOW_MS);
+  toast.querySelector('.toast-undo-btn').addEventListener('click', () => {
+    clearTimeout(timer);
+    toast.remove();
+    onUndo();
+  });
+}

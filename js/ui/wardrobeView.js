@@ -1,4 +1,4 @@
-import { getAllItems, deleteItem, updateItem } from '../storage.js';
+import { getAllItems, addItem, deleteItem, updateItem } from '../storage.js';
 import { openMatchResults } from './matchView.js';
 import { openItemChat } from './aiChatView.js';
 import { formalityFieldHtml, wireFormalityField } from './formalityField.js';
@@ -6,7 +6,7 @@ import { seasonFieldHtml, wireSeasonField } from './seasonField.js';
 import { wireAiReview } from './aiReview.js';
 import { pickImage } from '../camera.js';
 import { processImageFile } from '../imageProcess.js';
-import { escapeHtml, revokeBlobImagesOnLoad } from '../domUtil.js';
+import { escapeHtml, revokeBlobImagesOnLoad, showUndoToast } from '../domUtil.js';
 import { CATEGORIES } from '../constants.js';
 import { FORMALITY_LEVELS, FORMALITY_LABELS } from '../matcher.js';
 import { colorFamily } from '../colorMatch.js';
@@ -23,7 +23,10 @@ let filtersOpen = false;
 export function renderSwatches(colors, size = 'sm') {
   const cls = size === 'lg' ? 'swatch-lg' : 'swatch';
   return (colors || [])
-    .map((c) => `<span class="${cls}" style="background:${c.hex}" title="${c.hex}"></span>`)
+    .map(
+      (c) =>
+        `<span class="${cls}" style="background:${c.hex}" title="${c.hex}" role="img" aria-label="${colorFamily(c.hex)} swatch, ${c.hex}"></span>`
+    )
     .join('');
 }
 
@@ -169,7 +172,7 @@ function renderGrid(container, items) {
   if (!filtered.length) {
     grid.innerHTML = `
       <div class="empty-state">
-        <span class="empty-emoji">🧺</span>
+        <span class="empty-emoji" aria-hidden="true">🧺</span>
         ${items.length === 0 ? 'Your wardrobe is empty. Tap + to add your first item.' : 'No items match your filters.'}
       </div>
     `;
@@ -303,9 +306,12 @@ export function openItemDetail(item, { onChange } = {}) {
   });
 
   overlay.querySelector('#detail-delete').addEventListener('click', async () => {
-    if (!confirm('Delete this item from your wardrobe?')) return;
     await deleteItem(item.id);
     overlay.remove();
     onChange?.();
+    showUndoToast('Item deleted', async () => {
+      await addItem(item);
+      onChange?.();
+    });
   });
 }

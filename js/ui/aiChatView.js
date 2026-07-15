@@ -1,7 +1,13 @@
-import { getAllItems, updateItem, deleteItem } from '../storage.js';
+import { getAllItems, updateItem, deleteItem, addItem } from '../storage.js';
 import { sendMessageWithFallback, getAiConfig, setAiConfig, hasPrimaryKey, PROVIDERS, DEFAULT_PROVIDER } from '../ai/aiRouter.js';
-import { escapeHtml, revokeBlobImagesOnLoad } from '../domUtil.js';
+import { escapeHtml, revokeBlobImagesOnLoad, showUndoToast } from '../domUtil.js';
 import { CATEGORIES, PATTERNS, MAX_SUBCATEGORY_LENGTH, MAX_NOTES_LENGTH } from '../constants.js';
+
+/** Dispatched whenever the AI tab starts/stops waiting on a provider reply,
+ * so main.js can badge the nav tab if the user has navigated away. */
+function setAiThinking(thinking) {
+  document.dispatchEvent(new CustomEvent('fitted:ai-thinking', { detail: { thinking } }));
+}
 
 const FIXABLE_FIELDS = ['category', 'subCategory', 'pattern', 'notes'];
 
@@ -23,6 +29,7 @@ export function openItemChat(item) {
 }
 
 export async function render(container) {
+  container.innerHTML = `<div class="loading-row"><span class="spinner"></span> Loading…</div>`;
   const config = await getAiConfig();
 
   if (!hasPrimaryKey(config)) {
@@ -166,6 +173,7 @@ function renderChat(container, config) {
     thread.push({ role: 'user', content: text });
     renderThreadOnly(container, thread, focused, true);
 
+    setAiThinking(true);
     try {
       const systemPrompt = await buildSystemPrompt(focused?.item);
       let image;
@@ -178,11 +186,17 @@ function renderChat(container, config) {
     } catch (err) {
       thread.push({ role: 'assistant', content: err.message || 'Something went wrong.', isError: true });
     }
+    setAiThinking(false);
 
-    renderThreadOnly(container, thread, focused);
-    input.disabled = false;
-    container.querySelector('#chat-send').disabled = false;
-    input.focus();
+    // The user may have navigated away (and possibly back to a different
+    // thread) while the reply was in flight, detaching this render's DOM -
+    // only touch it if it's still the live one.
+    if (document.body.contains(input)) {
+      renderThreadOnly(container, thread, focused);
+      input.disabled = false;
+      container.querySelector('#chat-send').disabled = false;
+      input.focus();
+    }
   };
 
   container.querySelector('#chat-send').addEventListener('click', send);
@@ -196,6 +210,7 @@ function renderChat(container, config) {
 
 function renderThreadOnly(container, thread, focused, pending = false) {
   const threadEl = container.querySelector('#chat-thread');
+  if (!threadEl) return;
   const bubbles = thread.map(chatBubbleHtml).join('');
   const pendingHtml = pending
     ? `<div class="chat-bubble assistant pending"><span class="spinner"></span> Thinking…</div>`
@@ -216,6 +231,7 @@ function itemContextHtml(item) {
 
 function emptyThreadHtml(focused) {
   return `<div class="empty-state" style="padding:30px 10px;">
+    <span class="empty-emoji" aria-hidden="true">💬</span>
     ${focused ? 'Ask anything about this piece — styling ideas, care tips, what to pair it with.' : 'Ask what to wear, what you\'re missing, or how to organize your wardrobe.'}
   </div>`;
 }
@@ -293,12 +309,13 @@ async function runCleanupScan(container, config) {
 
   const items = await getAllItems();
   if (!items.length) {
-    resultEl.innerHTML = `<div class="empty-state">Add a few items first — nothing to review yet.</div>`;
+    resultEl.innerHTML = `<div class="empty-state"><span class="empty-emoji" aria-hidden="true">🧺</span>Add a few items first — nothing to review yet.</div>`;
     return;
   }
 
   const prompt = buildCleanupPrompt(items);
 
+  setAiThinking(true);
   try {
     const reply = await sendMessageWithFallback({ config, messages: [{ role: 'user', content: prompt }] });
     const suggestions = parseSuggestions(reply);
@@ -308,6 +325,7 @@ async function runCleanupScan(container, config) {
   } catch (err) {
     resultEl.innerHTML = `<div class="chat-bubble error">${escapeHtml(err.message || 'Something went wrong.')}</div>`;
   }
+  setAiThinking(false);
 }
 
 function buildCleanupPrompt(items) {
@@ -356,7 +374,7 @@ function isValidFieldFix(s) {
 
 function renderSuggestions(el, suggestions, items) {
   if (!suggestions.length) {
-    el.innerHTML = `<div class="empty-state"><span class="empty-emoji">✨</span>Nothing stood out — your wardrobe data looks clean.</div>`;
+    el.innerHTML = `<div class="empty-state"><span class="empty-emoji" aria-hidden="true">✨</span>Nothing stood out — your wardrobe data looks clean.</div>`;
     return;
   }
 
@@ -387,10 +405,13 @@ function renderSuggestions(el, suggestions, items) {
         btn.addEventListener('click', async () => {
           const item = items[Number(btn.dataset.itemIndex) - 1];
           if (!item) return;
-          if (!confirm('Delete this item from your wardrobe?')) return;
           await deleteItem(item.id);
           document.dispatchEvent(new CustomEvent('fitted:wardrobe-changed'));
           markApplied(card);
+          showUndoToast('Item deleted', async () => {
+            await addItem(item);
+            document.dispatchEvent(new CustomEvent('fitted:wardrobe-changed'));
+          });
         });
       });
     }

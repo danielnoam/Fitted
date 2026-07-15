@@ -6,6 +6,7 @@ import { formalityFieldHtml, wireFormalityField } from './formalityField.js';
 import { seasonFieldHtml } from './seasonField.js';
 import { revokeBlobImagesOnLoad, showToast } from '../domUtil.js';
 import { CATEGORIES, MAX_SUBCATEGORY_LENGTH, MAX_NOTES_LENGTH } from '../constants.js';
+import { colorFamily } from '../colorMatch.js';
 
 /**
  * Opens the capture overlay: picks an image, analyzes it, then lets the
@@ -35,7 +36,7 @@ export async function openCapture() {
     analysis = await processImageFile(file);
   } catch (err) {
     overlay.querySelector('.overlay-body').innerHTML = `
-      <div class="empty-state">Couldn't read that photo. Try another one.</div>
+      <div class="empty-state"><span class="empty-emoji" aria-hidden="true">⚠️</span>Couldn't read that photo. Try another one.</div>
     `;
     return;
   }
@@ -52,7 +53,10 @@ function renderForm(overlay, file, analysis) {
     <div class="detail-meta-row">
       <span class="pill">${analysis.pattern}</span>
       ${analysis.dominantColors
-        .map((c) => `<span class="swatch" style="background:${c.hex}" title="${c.hex}"></span>`)
+        .map(
+          (c) =>
+            `<span class="swatch" style="background:${c.hex}" title="${c.hex}" role="img" aria-label="${colorFamily(c.hex)} swatch, ${c.hex}"></span>`
+        )
         .join('')}
     </div>
 

@@ -32,7 +32,7 @@ export async function openMatchResults(target) {
   if (!results.length) {
     body.innerHTML = `
       <div class="empty-state">
-        <span class="empty-emoji">🤷</span>
+        <span class="empty-emoji" aria-hidden="true">🤷</span>
         No compatible items found yet. Add more pieces to your wardrobe to get matches.
       </div>
     `;

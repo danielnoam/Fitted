@@ -14,21 +14,36 @@ const viewRoot = document.getElementById('view-root');
 const topbarTitle = document.getElementById('topbar-title');
 const navButtons = document.querySelectorAll('.nav-btn');
 const fabCapture = document.getElementById('fab-capture');
+const aiThinkingBadge = document.getElementById('ai-thinking-badge');
 
 let currentTab = 'wardrobe';
+let aiThinking = false;
+
+// Shows a badge on the AI nav tab while it's waiting on a provider reply and
+// the user has navigated elsewhere - the in-chat "Thinking…" bubble already
+// covers the case where they're looking right at it.
+function updateAiThinkingBadge() {
+  aiThinkingBadge.hidden = !(aiThinking && currentTab !== 'ai');
+}
+
+document.addEventListener('fitted:ai-thinking', (e) => {
+  aiThinking = e.detail.thinking;
+  updateAiThinkingBadge();
+});
 
 async function renderTab(tab) {
   currentTab = tab;
   topbarTitle.textContent = TABS[tab].title;
   navButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.tab === tab));
   fabCapture.style.display = tab === 'wardrobe' ? '' : 'none';
+  updateAiThinkingBadge();
   try {
     await TABS[tab].view.render(viewRoot);
   } catch (err) {
     console.error(`Failed to render the ${tab} tab:`, err);
     viewRoot.innerHTML = `
       <div class="empty-state">
-        <span class="empty-emoji">⚠️</span>
+        <span class="empty-emoji" aria-hidden="true">⚠️</span>
         Something went wrong loading this tab. Try switching tabs or reloading the app.
       </div>
     `;

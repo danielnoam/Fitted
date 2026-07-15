@@ -7,6 +7,7 @@ import { updateItem } from '../storage.js';
 import { sendMessageWithFallback, getAiConfig, hasPrimaryKey } from '../ai/aiRouter.js';
 import { MAX_SUBCATEGORY_LENGTH } from '../constants.js';
 import { escapeHtml } from '../domUtil.js';
+import { colorFamily } from '../colorMatch.js';
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;
 
@@ -63,7 +64,7 @@ export async function wireAiReview(container, item, resultEl, onChange) {
 
 function renderReviewResult(resultEl, item, parsed, onChange) {
   if (!parsed) {
-    resultEl.innerHTML = `<div class="empty-state">Couldn't read a suggestion from the AI's reply.</div>`;
+    resultEl.innerHTML = `<div class="empty-state"><span class="empty-emoji" aria-hidden="true">🤔</span>Couldn't read a suggestion from the AI's reply.</div>`;
     return;
   }
 
@@ -85,7 +86,7 @@ function renderReviewResult(resultEl, item, parsed, onChange) {
   }
 
   if (!fieldFixes.length && !colorSuggestion) {
-    resultEl.innerHTML = `<div class="empty-state"><span class="empty-emoji">✅</span>The AI agrees with what's recorded.</div>`;
+    resultEl.innerHTML = `<div class="empty-state"><span class="empty-emoji" aria-hidden="true">✅</span>The AI agrees with what's recorded.</div>`;
     return;
   }
 
@@ -131,7 +132,8 @@ function fieldCardHtml(c) {
 }
 
 function colorCardHtml(current, suggested) {
-  const swatch = (c) => `<span class="swatch" style="background:${c.hex}" title="${c.hex}"></span>`;
+  const swatch = (c) =>
+    `<span class="swatch" style="background:${c.hex}" title="${c.hex}" role="img" aria-label="${colorFamily(c.hex)} swatch, ${c.hex}"></span>`;
   return `
     <div class="suggestion-card" data-field="colors">
       <p class="suggestion-issue">Dominant colors</p>

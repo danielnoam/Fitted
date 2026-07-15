@@ -33,7 +33,7 @@ function renderEntries(overlay, entries, itemsById) {
   if (!entries.length) {
     body.innerHTML = `
       <div class="empty-state">
-        <span class="empty-emoji">📜</span>
+        <span class="empty-emoji" aria-hidden="true">📜</span>
         Nothing logged yet — mark an item or outfit as worn to start a history.
       </div>
     `;

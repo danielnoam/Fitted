@@ -11,17 +11,17 @@ export async function render(container) {
   container.innerHTML = `
     <div class="suggest-modes">
       <div class="mode-card" id="mode-surprise">
-        <span class="mode-emoji">🎲</span>
+        <span class="mode-emoji" aria-hidden="true">🎲</span>
         <h3>Surprise me</h3>
         <p>A pairing from your wardrobe</p>
       </div>
       <div class="mode-card" id="mode-outfit">
-        <span class="mode-emoji">🧥</span>
+        <span class="mode-emoji" aria-hidden="true">🧥</span>
         <h3>Build an outfit</h3>
         <p>Top, bottom, shoes — and more</p>
       </div>
       <div class="mode-card" id="mode-photo">
-        <span class="mode-emoji">📷</span>
+        <span class="mode-emoji" aria-hidden="true">📷</span>
         <h3>From a photo</h3>
         <p>Check something new against what you own</p>
       </div>
@@ -42,7 +42,7 @@ async function runSurprise(container) {
   if (items.length < 2) {
     resultEl.innerHTML = `
       <div class="empty-state">
-        <span class="empty-emoji">🧺</span>
+        <span class="empty-emoji" aria-hidden="true">🧺</span>
         Add at least two wardrobe items to get a surprise pairing.
       </div>
     `;
@@ -52,7 +52,10 @@ async function runSurprise(container) {
   const combo = pickSurpriseCombo(items);
   if (!combo) {
     resultEl.innerHTML = `
-      <div class="empty-state">No compatible pairing found yet — add more variety to your wardrobe.</div>
+      <div class="empty-state">
+        <span class="empty-emoji" aria-hidden="true">🤷</span>
+        No compatible pairing found yet — add more variety to your wardrobe.
+      </div>
     `;
     return;
   }
@@ -97,7 +100,7 @@ async function runOutfit(container) {
   if (!outfit) {
     resultEl.innerHTML = `
       <div class="empty-state">
-        <span class="empty-emoji">🧥</span>
+        <span class="empty-emoji" aria-hidden="true">🧥</span>
         Add at least a top, a bottom, and shoes to build a full outfit.
       </div>
     `;
