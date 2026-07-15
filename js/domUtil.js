@@ -22,3 +22,12 @@ export function revokeBlobImagesOnLoad(root) {
     img.addEventListener('error', revoke, { once: true });
   });
 }
+
+/** Shows a brief self-dismissing toast message at the bottom of the screen. */
+export function showToast(message) {
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 2200);
+}

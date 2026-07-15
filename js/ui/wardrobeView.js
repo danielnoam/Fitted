@@ -2,13 +2,23 @@ import { getAllItems, deleteItem, updateItem } from '../storage.js';
 import { openMatchResults } from './matchView.js';
 import { openItemChat } from './aiChatView.js';
 import { formalityFieldHtml, wireFormalityField } from './formalityField.js';
+import { seasonFieldHtml, wireSeasonField } from './seasonField.js';
 import { wireAiReview } from './aiReview.js';
 import { pickImage } from '../camera.js';
 import { processImageFile } from '../imageProcess.js';
 import { escapeHtml, revokeBlobImagesOnLoad } from '../domUtil.js';
 import { CATEGORIES } from '../constants.js';
+import { FORMALITY_LEVELS, FORMALITY_LABELS } from '../matcher.js';
+import { colorFamily } from '../colorMatch.js';
+import { formatRelativeDate } from '../dateUtil.js';
+import { logWorn } from '../wearLog.js';
+import { openHistory } from './historyView.js';
 
 let activeFilter = 'all';
+let activeFormality = 'all';
+let activeColor = 'all';
+let searchQuery = '';
+let filtersOpen = false;
 
 export function renderSwatches(colors, size = 'sm') {
   const cls = size === 'lg' ? 'swatch-lg' : 'swatch';
@@ -32,12 +42,42 @@ export function itemCardHtml(item) {
 
 export async function render(container) {
   container.innerHTML = `
+    <div class="wardrobe-toolbar" style="display:flex;gap:8px;margin-bottom:10px;">
+      <input type="search" id="wardrobe-search" placeholder="Search notes, sub-category…" style="flex:1;" />
+      <button class="btn" id="wardrobe-filter-toggle">⚙️ Filters</button>
+      <button class="icon-btn" id="wardrobe-history" aria-label="Wear history">📜</button>
+    </div>
     <div class="chip-row" id="wardrobe-filters"></div>
+    <div id="wardrobe-extra-filters" style="display:none;">
+      <p class="section-title" style="margin-bottom:6px;">Formality</p>
+      <div class="chip-row" id="wardrobe-formality-filters"></div>
+      <p class="section-title" style="margin:10px 0 6px;">Color</p>
+      <div class="chip-row" id="wardrobe-color-filters"></div>
+    </div>
     <div id="wardrobe-grid"></div>
   `;
 
   const items = await getAllItems();
+
+  const searchInput = container.querySelector('#wardrobe-search');
+  searchInput.value = searchQuery;
+  searchInput.addEventListener('input', () => {
+    searchQuery = searchInput.value;
+    renderGrid(container, items);
+  });
+
+  const extraFilters = container.querySelector('#wardrobe-extra-filters');
+  extraFilters.style.display = filtersOpen ? '' : 'none';
+  container.querySelector('#wardrobe-filter-toggle').addEventListener('click', () => {
+    filtersOpen = !filtersOpen;
+    extraFilters.style.display = filtersOpen ? '' : 'none';
+  });
+
+  container.querySelector('#wardrobe-history').addEventListener('click', () => openHistory());
+
   renderFilters(container, items);
+  renderFormalityFilters(container, items);
+  renderColorFilters(container, items);
   renderGrid(container, items);
 }
 
@@ -65,15 +105,72 @@ function renderFilters(container, items) {
   });
 }
 
+function renderFormalityFilters(container, items) {
+  const row = container.querySelector('#wardrobe-formality-filters');
+  const levels = ['all', ...FORMALITY_LEVELS];
+  row.innerHTML = levels
+    .map((level) => {
+      const label = level === 'all' ? 'All' : FORMALITY_LABELS[level];
+      return `<button class="chip ${activeFormality === level ? 'active' : ''}" data-formality="${level}">${label}</button>`;
+    })
+    .join('');
+
+  row.querySelectorAll('.chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      activeFormality = chip.dataset.formality;
+      renderFormalityFilters(container, items);
+      renderGrid(container, items);
+    });
+  });
+}
+
+function itemColorFamilies(item) {
+  return new Set((item.dominantColors || []).map((c) => colorFamily(c.hex)));
+}
+
+function renderColorFilters(container, items) {
+  const row = container.querySelector('#wardrobe-color-filters');
+  const present = new Set();
+  items.forEach((item) => itemColorFamilies(item).forEach((fam) => present.add(fam)));
+  const families = ['all', ...[...present].sort()];
+
+  row.innerHTML = families
+    .map(
+      (fam) =>
+        `<button class="chip ${activeColor === fam ? 'active' : ''}" data-color="${fam}">${fam === 'all' ? 'All' : fam[0].toUpperCase() + fam.slice(1)}</button>`
+    )
+    .join('');
+
+  row.querySelectorAll('.chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      activeColor = chip.dataset.color;
+      renderColorFilters(container, items);
+      renderGrid(container, items);
+    });
+  });
+}
+
+function itemMatchesSearch(item, query) {
+  if (!query.trim()) return true;
+  const q = query.trim().toLowerCase();
+  return (item.subCategory || '').toLowerCase().includes(q) || (item.notes || '').toLowerCase().includes(q);
+}
+
 function renderGrid(container, items) {
   const grid = container.querySelector('#wardrobe-grid');
-  const filtered = activeFilter === 'all' ? items : items.filter((i) => i.category === activeFilter);
+  const filtered = items.filter(
+    (item) =>
+      (activeFilter === 'all' || item.category === activeFilter) &&
+      (activeFormality === 'all' || item.formality === activeFormality) &&
+      (activeColor === 'all' || itemColorFamilies(item).has(activeColor)) &&
+      itemMatchesSearch(item, searchQuery)
+  );
 
   if (!filtered.length) {
     grid.innerHTML = `
       <div class="empty-state">
         <span class="empty-emoji">🧺</span>
-        ${items.length === 0 ? 'Your wardrobe is empty. Tap + to add your first item.' : 'No items in this category yet.'}
+        ${items.length === 0 ? 'Your wardrobe is empty. Tap + to add your first item.' : 'No items match your filters.'}
       </div>
     `;
     return;
@@ -109,6 +206,13 @@ export function openItemDetail(item, { onChange } = {}) {
       <div class="detail-meta-row">${renderSwatches(item.dominantColors, 'lg')}</div>
       ${item.notes ? `<p style="color:var(--text-dim);font-size:14px;">${escapeHtml(item.notes)}</p>` : ''}
       ${formalityFieldHtml('detail', item.formality || null)}
+      ${seasonFieldHtml('detail', item.season || null)}
+      <p style="color:var(--text-dim);font-size:13px;margin:4px 0 0;">
+        ${item.lastWorn ? `Last worn: ${formatRelativeDate(item.lastWorn)}` : 'Not worn yet'}
+      </p>
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="btn btn-block" id="detail-mark-worn">👕 Mark as worn today</button>
+      </div>
       <div class="btn-row" style="margin-top:20px;">
         <button class="btn btn-primary btn-block" id="detail-find-matches">Find matches</button>
       </div>
@@ -156,6 +260,18 @@ export function openItemDetail(item, { onChange } = {}) {
     item.formality = value;
     await updateItem(item);
     onChange?.();
+  });
+
+  wireSeasonField(overlay, 'detail', async (value) => {
+    item.season = value;
+    await updateItem(item);
+    onChange?.();
+  });
+
+  overlay.querySelector('#detail-mark-worn').addEventListener('click', async () => {
+    await logWorn([item]);
+    onChange?.();
+    refreshDetail();
   });
 
   wireAiReview(overlay, item, overlay.querySelector('#detail-ai-review-result'), () => {

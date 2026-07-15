@@ -1,7 +1,7 @@
 // Templated "why this matches" text generated purely from scorer output.
 // No AI call involved.
 
-import { FORMALITY_LABELS } from './matcher.js';
+import { FORMALITY_LABELS, SEASON_LABELS } from './matcher.js';
 
 const COLOR_PHRASES = {
   complementary: 'complementary colors',
@@ -33,6 +33,13 @@ function formalityPhrase(target, candidate, penalty) {
   return `but ${a} vs ${b} may feel mismatched`;
 }
 
+function seasonPhrase(target, candidate, penalty) {
+  if (penalty <= 0) return null;
+  const a = SEASON_LABELS[target.season] ?? target.season;
+  const b = SEASON_LABELS[candidate.season] ?? candidate.season;
+  return `though ${a} vs ${b} won't suit the same weather`;
+}
+
 /**
  * Build a short explanation string for a matcher.js scoreMatch() result.
  * `result` is one entry from findMatches(), `target` is the item it was
@@ -43,9 +50,11 @@ export function explainMatch(target, result) {
   const catPhrase = categoryPhrase(result.categoryScore);
   const patPhrase = patternPhrase(target, result.item, result.patternPenalty);
   const formPhrase = formalityPhrase(target, result.item, result.formalityPenalty);
+  const seasPhrase = seasonPhrase(target, result.item, result.seasonPenalty);
 
+  const extras = [formPhrase, seasPhrase].filter(Boolean);
   const base = `${capitalize(colorPhrase)}, ${catPhrase}, ${patPhrase}`;
-  return formPhrase ? `${base}, ${formPhrase}.` : `${base}.`;
+  return extras.length ? `${base}, ${extras.join(', ')}.` : `${base}.`;
 }
 
 function capitalize(s) {

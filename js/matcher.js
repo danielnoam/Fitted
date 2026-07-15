@@ -34,11 +34,24 @@ export const FORMALITY_LABELS = {
 };
 const FORMALITY_PENALTY_PER_GAP = 0.12;
 
+// Weather suitability. 'all-season' matches anything with no penalty; unset
+// (null/undefined) on either item also skips this factor, same rationale as
+// formality above. Only a genuine warm/cold clash is penalized - there's no
+// gap scale to walk since there are just three buckets.
+export const SEASONS = ['warm-weather', 'all-season', 'cold-weather'];
+export const SEASON_LABELS = {
+  'warm-weather': 'Warm weather',
+  'all-season': 'All season',
+  'cold-weather': 'Cold weather',
+};
+const SEASON_PENALTY = 0.2;
+
 export const WEIGHTS = {
   color: 0.5,
   category: 0.3,
   patternPenalty: PATTERN_PENALTY,
   formalityPenaltyPerGap: FORMALITY_PENALTY_PER_GAP,
+  seasonPenalty: SEASON_PENALTY,
 };
 
 function categoryKey(catA, catB) {
@@ -72,6 +85,16 @@ export function formalityPenalty(formalityA, formalityB) {
 }
 
 /**
+ * Penalty for pairing a warm-weather item with a cold-weather one. Zero if
+ * either item is 'all-season' or has no season set at all.
+ */
+export function seasonPenalty(seasonA, seasonB) {
+  if (!seasonA || !seasonB) return 0;
+  if (seasonA === 'all-season' || seasonB === 'all-season') return 0;
+  return seasonA !== seasonB ? SEASON_PENALTY : 0;
+}
+
+/**
  * Score a candidate item against a target item. Returns null if the pair
  * is excluded (same category).
  */
@@ -82,9 +105,10 @@ export function scoreMatch(target, candidate) {
   const color = scoreColorHarmony(target.dominantColors, candidate.dominantColors);
   const penalty = patternPenalty(target.pattern, candidate.pattern);
   const formalityPen = formalityPenalty(target.formality, candidate.formality);
+  const seasonPen = seasonPenalty(target.season, candidate.season);
 
   const score =
-    WEIGHTS.color * color.score + WEIGHTS.category * catScore - penalty - formalityPen;
+    WEIGHTS.color * color.score + WEIGHTS.category * catScore - penalty - formalityPen - seasonPen;
 
   return {
     item: candidate,
@@ -94,6 +118,7 @@ export function scoreMatch(target, candidate) {
     categoryScore: catScore,
     patternPenalty: penalty,
     formalityPenalty: formalityPen,
+    seasonPenalty: seasonPen,
   };
 }
 
@@ -126,4 +151,77 @@ export function pickSurpriseCombo(wardrobeItems, { topPoolSize = 5 } = {}) {
 
   const pick = matches[Math.floor(Math.random() * matches.length)];
   return { seed, match: pick };
+}
+
+// ---------- Full outfit builder ----------
+
+const REQUIRED_OUTFIT_CATEGORIES = ['top', 'bottom', 'shoes'];
+const OPTIONAL_OUTFIT_CATEGORIES = ['outerwear', 'accessory'];
+
+/**
+ * Scores a full outfit (3+ items, one per category) as the average of every
+ * pairwise scoreMatch() between its items - the same deterministic scoring
+ * findMatches() uses for pairs, just aggregated across every combination in
+ * the outfit rather than just one.
+ */
+export function scoreOutfit(items) {
+  const pairs = [];
+  for (let i = 0; i < items.length; i++) {
+    for (let j = i + 1; j < items.length; j++) {
+      const result = scoreMatch(items[i], items[j]);
+      if (result) pairs.push({ a: items[i], ...result });
+    }
+  }
+  const score = pairs.length ? pairs.reduce((sum, p) => sum + p.score, 0) / pairs.length : 0;
+  return { items, score, pairs };
+}
+
+/**
+ * Builds a full outfit (top + bottom + shoes, plus outerwear/accessory when
+ * they help) from the wardrobe. Seeds on a random top, narrows bottom/shoes/
+ * outerwear/accessory to each one's top matches against that seed (so the
+ * search stays small regardless of wardrobe size), then brute-forces every
+ * combination across those short pools and keeps the highest-scoring one.
+ * Optional slots include a "leave this slot empty" option in their pool, so
+ * an outerwear/accessory piece is only included when it actually improves
+ * the outfit's average score.
+ *
+ * Returns null if the wardrobe doesn't have at least one top, bottom, and
+ * pair of shoes.
+ */
+export function buildOutfit(wardrobeItems, { poolSize = 5 } = {}) {
+  const byCategory = {};
+  for (const item of wardrobeItems) {
+    (byCategory[item.category] ??= []).push(item);
+  }
+  if (REQUIRED_OUTFIT_CATEGORIES.some((cat) => !byCategory[cat]?.length)) return null;
+
+  const seed = byCategory.top[Math.floor(Math.random() * byCategory.top.length)];
+
+  function pool(category) {
+    return findMatches(seed, byCategory[category] || [], { limit: poolSize }).map((r) => r.item);
+  }
+
+  const slotPools = { top: [seed], bottom: pool('bottom'), shoes: pool('shoes') };
+  if (!slotPools.bottom.length || !slotPools.shoes.length) return null;
+
+  for (const cat of OPTIONAL_OUTFIT_CATEGORIES) {
+    const candidates = pool(cat);
+    if (candidates.length) slotPools[cat] = [null, ...candidates];
+  }
+
+  const slots = Object.keys(slotPools);
+  let best = null;
+  (function search(idx, chosen) {
+    if (idx === slots.length) {
+      const result = scoreOutfit(chosen);
+      if (!best || result.score > best.score) best = result;
+      return;
+    }
+    for (const item of slotPools[slots[idx]]) {
+      search(idx + 1, item ? [...chosen, item] : chosen);
+    }
+  })(0, []);
+
+  return best;
 }

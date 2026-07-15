@@ -4,9 +4,12 @@ import {
   categoryScore,
   patternPenalty,
   formalityPenalty,
+  seasonPenalty,
   scoreMatch,
   findMatches,
   pickSurpriseCombo,
+  scoreOutfit,
+  buildOutfit,
 } from '../js/matcher.js';
 
 function item(overrides = {}) {
@@ -67,6 +70,30 @@ describe('formalityPenalty', () => {
   });
 });
 
+describe('seasonPenalty', () => {
+  test('zero when either side unset', () => {
+    assert.equal(seasonPenalty(null, 'cold-weather'), 0);
+    assert.equal(seasonPenalty('warm-weather', undefined), 0);
+  });
+
+  test('zero when either side is all-season', () => {
+    assert.equal(seasonPenalty('all-season', 'cold-weather'), 0);
+    assert.equal(seasonPenalty('warm-weather', 'all-season'), 0);
+  });
+
+  test('zero for matching seasons', () => {
+    assert.equal(seasonPenalty('warm-weather', 'warm-weather'), 0);
+  });
+
+  test('penalizes a warm/cold clash', () => {
+    assert.equal(seasonPenalty('warm-weather', 'cold-weather'), 0.2);
+  });
+
+  test('is symmetric', () => {
+    assert.equal(seasonPenalty('warm-weather', 'cold-weather'), seasonPenalty('cold-weather', 'warm-weather'));
+  });
+});
+
 describe('scoreMatch', () => {
   test('returns null for same-category pairs', () => {
     const target = item({ category: 'top' });
@@ -100,6 +127,14 @@ describe('scoreMatch', () => {
     assert.ok('categoryScore' in result);
     assert.ok('patternPenalty' in result);
     assert.ok('formalityPenalty' in result);
+    assert.ok('seasonPenalty' in result);
+  });
+
+  test('a season clash lowers the score versus an otherwise identical pair', () => {
+    const target = item({ category: 'top', season: 'warm-weather' });
+    const clashing = item({ category: 'bottom', season: 'cold-weather' });
+    const matching = item({ category: 'bottom', season: 'warm-weather' });
+    assert.ok(scoreMatch(target, clashing).score < scoreMatch(target, matching).score);
   });
 });
 
@@ -158,5 +193,89 @@ describe('pickSurpriseCombo', () => {
     assert.ok(combo.seed);
     assert.ok(combo.match.item);
     assert.notEqual(combo.seed.id, combo.match.item.id);
+  });
+});
+
+describe('scoreOutfit', () => {
+  test('scores as the average of every pairwise scoreMatch', () => {
+    const top = item({ id: 't', category: 'top' });
+    const bottom = item({ id: 'b', category: 'bottom' });
+    const shoes = item({ id: 's', category: 'shoes' });
+    const result = scoreOutfit([top, bottom, shoes]);
+
+    assert.equal(result.pairs.length, 3); // C(3,2)
+    const manualAvg =
+      (scoreMatch(top, bottom).score + scoreMatch(top, shoes).score + scoreMatch(bottom, shoes).score) / 3;
+    assert.equal(result.score, manualAvg);
+  });
+
+  test('excludes same-category pairs from the average', () => {
+    const topA = item({ id: 't1', category: 'top' });
+    const topB = item({ id: 't2', category: 'top' });
+    const bottom = item({ id: 'b', category: 'bottom' });
+    const result = scoreOutfit([topA, topB, bottom]);
+
+    assert.equal(result.pairs.length, 2); // topA-bottom, topB-bottom (topA-topB excluded)
+  });
+
+  test('an empty or single-item outfit scores zero with no pairs', () => {
+    assert.deepEqual(scoreOutfit([]).pairs, []);
+    assert.equal(scoreOutfit([]).score, 0);
+    assert.equal(scoreOutfit([item({ id: '1' })]).score, 0);
+  });
+});
+
+describe('buildOutfit', () => {
+  function outfitBasics(overrides = {}) {
+    return {
+      top: item({ id: 'top', category: 'top', dominantColors: [{ hex: '#ff0000', ratio: 1 }], ...overrides.top }),
+      bottom: item({ id: 'bottom', category: 'bottom', dominantColors: [{ hex: '#808080', ratio: 1 }] }),
+      shoes: item({ id: 'shoes', category: 'shoes', dominantColors: [{ hex: '#808080', ratio: 1 }] }),
+    };
+  }
+
+  test('returns null when a required category is missing', () => {
+    const { top, bottom } = outfitBasics(); // no shoes at all
+    assert.equal(buildOutfit([top, bottom]), null);
+  });
+
+  test('builds a top/bottom/shoes outfit when no optional items exist', () => {
+    const { top, bottom, shoes } = outfitBasics();
+    const result = buildOutfit([top, bottom, shoes]);
+    assert.equal(result.items.length, 3);
+    const ids = result.items.map((i) => i.id).sort();
+    assert.deepEqual(ids, ['bottom', 'shoes', 'top']);
+    assert.ok(result.score > 0);
+  });
+
+  test('includes an optional outerwear piece when it raises the outfit score', () => {
+    const { top, bottom, shoes } = outfitBasics();
+    const outerwear = item({
+      id: 'outerwear',
+      category: 'outerwear',
+      dominantColors: [{ hex: '#00ffff', ratio: 1 }], // complementary to the red top
+    });
+    const result = buildOutfit([top, bottom, shoes, outerwear]);
+    assert.ok(result.items.some((i) => i.id === 'outerwear'));
+  });
+
+  test('leaves an optional outerwear piece out when it drags the outfit score down', () => {
+    const { bottom, shoes } = outfitBasics();
+    const top = item({
+      id: 'top',
+      category: 'top',
+      pattern: 'patterned',
+      formality: 'athletic',
+      dominantColors: [{ hex: '#ff0000', ratio: 1 }],
+    });
+    const outerwear = item({
+      id: 'outerwear',
+      category: 'outerwear',
+      pattern: 'patterned', // double-patterned penalty against the top
+      formality: 'formal', // wide formality gap against the top
+      dominantColors: [{ hex: '#00ff00', ratio: 1 }], // clashes with the red top
+    });
+    const result = buildOutfit([top, bottom, shoes, outerwear]);
+    assert.ok(!result.items.some((i) => i.id === 'outerwear'));
   });
 });

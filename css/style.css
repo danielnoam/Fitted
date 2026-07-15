@@ -439,12 +439,13 @@ textarea {
 
 .combo-pair {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 16px;
 }
 
 .combo-pair .item-card {
-  flex: 1;
+  flex: 1 1 100px;
 }
 
 /* ---------- Match results ---------- */

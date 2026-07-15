@@ -116,6 +116,42 @@ export function scoreColorPair(hexA, hexB) {
   return { score: Math.max(0, Math.min(1, score)), relation };
 }
 
+// Named hue buckets used for the wardrobe color filter. Anchored on evenly
+// spaced representative hues; a color is assigned to whichever anchor its
+// hue is closest to (by circular distance), so every hue maps to exactly
+// one family with no gaps or overlaps.
+const COLOR_FAMILIES = [
+  { name: 'red', hue: 0 },
+  { name: 'orange', hue: 30 },
+  { name: 'yellow', hue: 60 },
+  { name: 'green', hue: 120 },
+  { name: 'cyan', hue: 180 },
+  { name: 'blue', hue: 220 },
+  { name: 'purple', hue: 270 },
+  { name: 'pink', hue: 320 },
+];
+
+/**
+ * Buckets a hex color into a human-readable family name for filtering, e.g.
+ * "red", "blue", or "neutral" for low-saturation/near-black/near-white
+ * colors (mirrors isNeutral()'s definition of neutral).
+ */
+export function colorFamily(hex) {
+  const hsl = hexToHsl(hex);
+  if (isNeutral(hsl)) return 'neutral';
+
+  let best = COLOR_FAMILIES[0];
+  let bestDist = Infinity;
+  for (const family of COLOR_FAMILIES) {
+    const d = hueDistance(hsl.h, family.hue);
+    if (d < bestDist) {
+      bestDist = d;
+      best = family;
+    }
+  }
+  return best.name;
+}
+
 /**
  * Score overall color harmony between two items' dominant-color sets,
  * weighting each pair by the product of their prevalence ratios.

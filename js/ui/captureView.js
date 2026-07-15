@@ -3,7 +3,8 @@ import { processImageFile } from '../imageProcess.js';
 import { addItem, uuid } from '../storage.js';
 import { openMatchResults } from './matchView.js';
 import { formalityFieldHtml, wireFormalityField } from './formalityField.js';
-import { revokeBlobImagesOnLoad } from '../domUtil.js';
+import { seasonFieldHtml } from './seasonField.js';
+import { revokeBlobImagesOnLoad, showToast } from '../domUtil.js';
 import { CATEGORIES, MAX_SUBCATEGORY_LENGTH, MAX_NOTES_LENGTH } from '../constants.js';
 
 /**
@@ -69,6 +70,7 @@ function renderForm(overlay, file, analysis) {
     </div>
 
     ${formalityFieldHtml('cap', null)}
+    ${seasonFieldHtml('cap', null)}
 
     <div class="field">
       <label for="cap-notes">Notes (optional)</label>
@@ -104,6 +106,7 @@ function renderForm(overlay, file, analysis) {
       dominantColors: analysis.dominantColors,
       pattern: analysis.pattern,
       formality: body.querySelector('#cap-formality').value || null,
+      season: body.querySelector('#cap-season').value || null,
       notes: body.querySelector('#cap-notes').value.trim().slice(0, MAX_NOTES_LENGTH),
     };
   }
@@ -129,12 +132,4 @@ function renderForm(overlay, file, analysis) {
     overlay.remove();
     openMatchResults(transientItem);
   });
-}
-
-function showToast(message) {
-  const toast = document.createElement('div');
-  toast.className = 'toast';
-  toast.textContent = message;
-  document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 2200);
 }

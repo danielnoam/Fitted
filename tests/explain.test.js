@@ -4,17 +4,18 @@ import { explainMatch } from '../js/explain.js';
 
 function result(overrides = {}) {
   return {
-    item: { pattern: 'solid', formality: null },
+    item: { pattern: 'solid', formality: null, season: null },
     colorRelation: 'neutral',
     categoryScore: 1.0,
     patternPenalty: 0,
     formalityPenalty: 0,
+    seasonPenalty: 0,
     ...overrides,
   };
 }
 
 function target(overrides = {}) {
-  return { pattern: 'solid', formality: null, ...overrides };
+  return { pattern: 'solid', formality: null, season: null, ...overrides };
 }
 
 describe('explainMatch', () => {
@@ -65,6 +66,31 @@ describe('explainMatch', () => {
       result({ item: { pattern: 'solid', formality: 'formal' }, formalityPenalty: 0.24 })
     );
     assert.match(text, /Athletic vs Formal may feel mismatched/);
+  });
+
+  test('omits the season clause when there is no season penalty', () => {
+    const text = explainMatch(target(), result({ seasonPenalty: 0 }));
+    assert.doesNotMatch(text, /weather/);
+  });
+
+  test('appends a season-clash clause naming both season labels when penalized', () => {
+    const text = explainMatch(
+      target({ season: 'warm-weather' }),
+      result({ item: { pattern: 'solid', formality: null, season: 'cold-weather' }, seasonPenalty: 0.2 })
+    );
+    assert.match(text, /Warm weather vs Cold weather won't suit the same weather/);
+  });
+
+  test('joins both a formality and a season clause when both are penalized', () => {
+    const text = explainMatch(
+      target({ formality: 'athletic', season: 'warm-weather' }),
+      result({
+        item: { pattern: 'solid', formality: 'formal', season: 'cold-weather' },
+        formalityPenalty: 0.24,
+        seasonPenalty: 0.2,
+      })
+    );
+    assert.match(text, /mismatched, though Warm weather vs Cold weather/);
   });
 
   test('ends with a single period regardless of clause count', () => {

@@ -8,6 +8,7 @@ import {
   isNeutral,
   scoreColorPair,
   scoreColorHarmony,
+  colorFamily,
 } from '../js/colorMatch.js';
 
 describe('hexToRgb', () => {
@@ -123,6 +124,31 @@ describe('scoreColorHarmony', () => {
     const b = [{ hex: '#00ffff' }];
     const result = scoreColorHarmony(a, b);
     assert.equal(result.score, scoreColorPair('#ff0000', '#00ffff').score);
+  });
+});
+
+describe('colorFamily', () => {
+  test('low-saturation colors are neutral', () => {
+    assert.equal(colorFamily('#808080'), 'neutral');
+  });
+
+  test('near-black and near-white are neutral regardless of hue', () => {
+    assert.equal(colorFamily('#050505'), 'neutral');
+    assert.equal(colorFamily('#fafafa'), 'neutral');
+  });
+
+  test('buckets saturated colors into their nearest named family', () => {
+    assert.equal(colorFamily('#ff0000'), 'red');
+    assert.equal(colorFamily('#0000ff'), 'blue');
+    assert.equal(colorFamily('#00ff00'), 'green');
+    assert.equal(colorFamily('#ffff00'), 'yellow');
+  });
+
+  test('every hue maps to exactly one family with no gaps', () => {
+    for (let h = 0; h < 360; h += 10) {
+      const hex = hslToHexApprox(h);
+      assert.equal(typeof colorFamily(hex), 'string');
+    }
   });
 });
 

@@ -40,7 +40,7 @@
       (`tests/xss.test.js`, uses `jsdom`).
 
 Run with `npm test` (Node's built-in `node:test` runner, no build step).
-73 pure-logic tests + 5 DOM-dependent tests (storage/aiRouter/xss), 78 total.
+118 tests total (pure-logic + storage/aiRouter/wearLog/xss DOM-dependent ones).
 
 ## Explicitly not doing (for now)
 
@@ -49,19 +49,29 @@ Run with `npm test` (Node's built-in `node:test` runner, no build step).
 - Hardening `camera.js`'s cancel detection — already documented as
   best-effort, low impact.
 
-## Next up (not started)
+## Next up
 
 ### Features
 
-- [ ] Full outfit builder, not just pairs — extend `matcher.js`'s pairwise
-      scoring into a "build a full fit" mode (top + bottom + shoes +
-      optional outerwear/accessory) across 3-4 slots at once.
-- [ ] Wardrobe search/filter beyond the category chips — filter by color,
-      formality, or pattern; text search over notes/subCategory.
-- [ ] Outfit history / "worn today" log — track what was actually worn, to
-      avoid repeats and eventually surface "you haven't worn this in months."
-- [ ] Seasons/weather tagging — same mechanism as the existing formality
-      field/AI-suggest button, gates suggestions by season.
+- [x] Full outfit builder, not just pairs — `matcher.js`'s `scoreOutfit`/
+      `buildOutfit` combine pairwise scoring across top+bottom+shoes (plus
+      outerwear/accessory when they raise the average). Surfaced as a
+      "Build an outfit" mode in the Suggest tab.
+- [x] Wardrobe search/filter beyond the category chips — a collapsible
+      filters panel adds formality and color-family chips (`colorMatch.js`'s
+      new `colorFamily()` bucketing), plus a text search over notes/
+      subCategory. See `wardrobeView.js`.
+- [x] Outfit history / "worn today" log — a new `history` IndexedDB store
+      (`storage.js`) plus `wearLog.js`'s `logWorn()`, wired to "Mark as worn
+      today" on the item detail view, the surprise pairing, and the outfit
+      builder. Each item gets a `lastWorn` stamp; a 📜 button in the wardrobe
+      toolbar opens the full log (`historyView.js`).
+- [x] Seasons/weather tagging — `matcher.js` adds a `SEASONS` field
+      (warm-weather/all-season/cold-weather) and a `seasonPenalty()` that
+      folds into `scoreMatch`/`scoreOutfit`, mirroring how formality already
+      works. `seasonField.js` mirrors `formalityField.js`'s UI (manual
+      select only, no AI-suggest button since there's no photo-classifier
+      hook for weather the way there is for formality).
 
 ### Quality/UX polish
 

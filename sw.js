@@ -1,5 +1,5 @@
 // Kept in step with js/version.js so each deploy busts old caches.
-const CACHE_NAME = 'fitted-cache-v9';
+const CACHE_NAME = 'fitted-cache-v10';
 
 const PRECACHE_URLS = [
   './',
@@ -11,6 +11,8 @@ const PRECACHE_URLS = [
   './js/camera.js',
   './js/constants.js',
   './js/domUtil.js',
+  './js/dateUtil.js',
+  './js/wearLog.js',
   './js/imageProcess.js',
   './js/colorMatch.js',
   './js/matcher.js',
@@ -26,7 +28,9 @@ const PRECACHE_URLS = [
   './js/ui/matchView.js',
   './js/ui/aiChatView.js',
   './js/ui/formalityField.js',
+  './js/ui/seasonField.js',
   './js/ui/aiReview.js',
+  './js/ui/historyView.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
 ];

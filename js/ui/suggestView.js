@@ -1,10 +1,11 @@
 import { getAllItems } from '../storage.js';
-import { pickSurpriseCombo, scoreMatch } from '../matcher.js';
+import { pickSurpriseCombo, scoreMatch, buildOutfit } from '../matcher.js';
 import { explainMatch } from '../explain.js';
 import { itemCardHtml, openItemDetail } from './wardrobeView.js';
 import { openMatchResults } from './matchView.js';
 import { openCapture } from './captureView.js';
-import { revokeBlobImagesOnLoad } from '../domUtil.js';
+import { revokeBlobImagesOnLoad, showToast } from '../domUtil.js';
+import { logWorn } from '../wearLog.js';
 
 export async function render(container) {
   container.innerHTML = `
@@ -13,6 +14,11 @@ export async function render(container) {
         <span class="mode-emoji">🎲</span>
         <h3>Surprise me</h3>
         <p>A pairing from your wardrobe</p>
+      </div>
+      <div class="mode-card" id="mode-outfit">
+        <span class="mode-emoji">🧥</span>
+        <h3>Build an outfit</h3>
+        <p>Top, bottom, shoes — and more</p>
       </div>
       <div class="mode-card" id="mode-photo">
         <span class="mode-emoji">📷</span>
@@ -24,6 +30,7 @@ export async function render(container) {
   `;
 
   container.querySelector('#mode-surprise').addEventListener('click', () => runSurprise(container));
+  container.querySelector('#mode-outfit').addEventListener('click', () => runOutfit(container));
   container.querySelector('#mode-photo').addEventListener('click', () => openCapture());
 }
 
@@ -61,6 +68,9 @@ async function runSurprise(container) {
       <button class="btn btn-block" id="suggest-shuffle">Shuffle</button>
       <button class="btn btn-primary btn-block" id="suggest-more">See more matches</button>
     </div>
+    <div class="btn-row" style="margin-top:10px;">
+      <button class="btn btn-block" id="suggest-worn">👕 Mark as worn today</button>
+    </div>
   `;
   revokeBlobImagesOnLoad(resultEl);
 
@@ -72,4 +82,63 @@ async function runSurprise(container) {
 
   resultEl.querySelector('#suggest-shuffle').addEventListener('click', () => runSurprise(container));
   resultEl.querySelector('#suggest-more').addEventListener('click', () => openMatchResults(seed));
+  resultEl.querySelector('#suggest-worn').addEventListener('click', async () => {
+    await logWorn([seed, match.item]);
+    showToast('Logged as worn today');
+  });
+}
+
+async function runOutfit(container) {
+  const resultEl = container.querySelector('#suggest-result');
+  resultEl.innerHTML = `<div class="loading-row"><span class="spinner"></span> Building an outfit…</div>`;
+
+  const items = await getAllItems();
+  const outfit = buildOutfit(items);
+  if (!outfit) {
+    resultEl.innerHTML = `
+      <div class="empty-state">
+        <span class="empty-emoji">🧥</span>
+        Add at least a top, a bottom, and shoes to build a full outfit.
+      </div>
+    `;
+    return;
+  }
+
+  const pct = Math.round(outfit.score * 100);
+  const pairsHtml = outfit.pairs
+    .map(
+      (pair) => `
+      <p class="match-why" style="font-size:12px;margin:4px 0;">
+        ${capitalize(pair.a.category)} + ${capitalize(pair.item.category)}: ${explainMatch(pair.a, pair)}
+      </p>`
+    )
+    .join('');
+
+  resultEl.innerHTML = `
+    <p class="section-title">Suggested outfit <span style="color:var(--accent);">${pct}%</span></p>
+    <div class="combo-pair">${outfit.items.map(itemCardHtml).join('')}</div>
+    ${pairsHtml}
+    <div class="btn-row" style="margin-top:12px;">
+      <button class="btn btn-block" id="outfit-shuffle">Shuffle</button>
+      <button class="btn btn-primary btn-block" id="outfit-worn">👕 Mark as worn today</button>
+    </div>
+  `;
+  revokeBlobImagesOnLoad(resultEl);
+
+  resultEl.querySelectorAll('.item-card').forEach((card) => {
+    card.addEventListener('click', () => {
+      const item = outfit.items.find((i) => i.id === card.dataset.id);
+      if (item) openItemDetail(item, {});
+    });
+  });
+
+  resultEl.querySelector('#outfit-shuffle').addEventListener('click', () => runOutfit(container));
+  resultEl.querySelector('#outfit-worn').addEventListener('click', async () => {
+    await logWorn(outfit.items);
+    showToast('Logged as worn today');
+  });
+}
+
+function capitalize(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }

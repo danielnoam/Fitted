@@ -1,9 +1,11 @@
-// IndexedDB wrapper for wardrobe items + app settings (incl. AI API key).
+// IndexedDB wrapper for wardrobe items, wear history, and app settings
+// (incl. AI API key).
 
 const DB_NAME = 'fitted-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const ITEMS_STORE = 'items';
 const SETTINGS_STORE = 'settings';
+const HISTORY_STORE = 'history';
 
 let dbPromise = null;
 
@@ -20,6 +22,10 @@ function openDb() {
       }
       if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
         db.createObjectStore(SETTINGS_STORE, { keyPath: 'key' });
+      }
+      if (!db.objectStoreNames.contains(HISTORY_STORE)) {
+        const store = db.createObjectStore(HISTORY_STORE, { keyPath: 'id' });
+        store.createIndex('date', 'date', { unique: false });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -92,4 +98,22 @@ export async function setSetting(key, value) {
 export async function deleteSetting(key) {
   const store = await tx(SETTINGS_STORE, 'readwrite');
   await reqToPromise(store.delete(key));
+}
+
+/** A wear-history entry: { id, date: 'YYYY-MM-DD', itemIds: [...] }. */
+export async function addHistoryEntry(entry) {
+  const store = await tx(HISTORY_STORE, 'readwrite');
+  await reqToPromise(store.add(entry));
+  return entry;
+}
+
+export async function deleteHistoryEntry(id) {
+  const store = await tx(HISTORY_STORE, 'readwrite');
+  await reqToPromise(store.delete(id));
+}
+
+export async function getAllHistoryEntries() {
+  const store = await tx(HISTORY_STORE, 'readonly');
+  const entries = await reqToPromise(store.getAll());
+  return entries.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }

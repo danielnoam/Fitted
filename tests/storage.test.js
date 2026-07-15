@@ -69,4 +69,31 @@ describe('storage (IndexedDB wrapper)', () => {
     const fetched = await storage.getSetting('temp-setting', null);
     assert.equal(fetched, null);
   });
+
+  test('history: addHistoryEntry then getAllHistoryEntries round-trips it', async () => {
+    const entry = { id: storage.uuid(), date: '2026-07-01', itemIds: ['a', 'b'] };
+    await storage.addHistoryEntry(entry);
+    const all = await storage.getAllHistoryEntries();
+    assert.ok(all.some((e) => e.id === entry.id && e.date === entry.date));
+  });
+
+  test('history: getAllHistoryEntries sorts newest date first', async () => {
+    const older = { id: storage.uuid(), date: '2020-01-01', itemIds: [] };
+    const newer = { id: storage.uuid(), date: '2030-01-01', itemIds: [] };
+    await storage.addHistoryEntry(older);
+    await storage.addHistoryEntry(newer);
+
+    const all = await storage.getAllHistoryEntries();
+    const idxOlder = all.findIndex((e) => e.id === older.id);
+    const idxNewer = all.findIndex((e) => e.id === newer.id);
+    assert.ok(idxNewer < idxOlder);
+  });
+
+  test('history: deleteHistoryEntry removes the entry', async () => {
+    const entry = { id: storage.uuid(), date: '2026-07-01', itemIds: [] };
+    await storage.addHistoryEntry(entry);
+    await storage.deleteHistoryEntry(entry.id);
+    const all = await storage.getAllHistoryEntries();
+    assert.ok(!all.some((e) => e.id === entry.id));
+  });
 });
