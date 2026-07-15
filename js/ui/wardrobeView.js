@@ -2,6 +2,9 @@ import { getAllItems, deleteItem, updateItem } from '../storage.js';
 import { openMatchResults } from './matchView.js';
 import { openItemChat } from './aiChatView.js';
 import { formalityFieldHtml, wireFormalityField } from './formalityField.js';
+import { wireAiReview } from './aiReview.js';
+import { pickImage } from '../camera.js';
+import { processImageFile } from '../imageProcess.js';
 
 const CATEGORIES = ['top', 'bottom', 'outerwear', 'shoes', 'accessory'];
 
@@ -109,6 +112,14 @@ export function openItemDetail(item, { onChange } = {}) {
         <button class="btn btn-primary btn-block" id="detail-find-matches">Find matches</button>
       </div>
       <div class="btn-row" style="margin-top:10px;">
+        <button class="btn btn-block" id="detail-retake">📷 Retake photo</button>
+      </div>
+      <div id="detail-retake-status" style="font-size:12px;color:var(--text-dim);margin-top:4px;"></div>
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="btn btn-block" id="detail-ai-review" style="display:none;">🔍 Re-check with AI</button>
+      </div>
+      <div id="detail-ai-review-result"></div>
+      <div class="btn-row" style="margin-top:10px;">
         <button class="btn btn-block" id="detail-ask-ai">Ask AI about this</button>
       </div>
       <div class="btn-row" style="margin-top:10px;">
@@ -118,6 +129,13 @@ export function openItemDetail(item, { onChange } = {}) {
   `;
 
   document.body.appendChild(overlay);
+
+  // Closes and reopens the detail overlay so the thumbnail/pills/swatches
+  // reflect whatever an AI review or retake just changed on `item`.
+  const refreshDetail = () => {
+    overlay.remove();
+    openItemDetail(item, { onChange });
+  };
 
   overlay.querySelector('#detail-close').addEventListener('click', () => overlay.remove());
 
@@ -136,6 +154,29 @@ export function openItemDetail(item, { onChange } = {}) {
     item.formality = value;
     await updateItem(item);
     onChange?.();
+  });
+
+  wireAiReview(overlay, item, overlay.querySelector('#detail-ai-review-result'), () => {
+    onChange?.();
+    refreshDetail();
+  });
+
+  overlay.querySelector('#detail-retake').addEventListener('click', async () => {
+    const file = await pickImage();
+    if (!file) return;
+    const statusEl = overlay.querySelector('#detail-retake-status');
+    statusEl.textContent = 'Updating photo…';
+    try {
+      const analysis = await processImageFile(file);
+      item.thumbnail = analysis.thumbnail;
+      item.dominantColors = analysis.dominantColors;
+      item.pattern = analysis.pattern;
+      await updateItem(item);
+      onChange?.();
+      refreshDetail();
+    } catch (err) {
+      statusEl.textContent = "Couldn't read that photo. Try again.";
+    }
   });
 
   overlay.querySelector('#detail-ask-ai').addEventListener('click', () => {

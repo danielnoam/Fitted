@@ -1,5 +1,5 @@
 // Kept in step with js/version.js so each deploy busts old caches.
-const CACHE_NAME = 'fitted-cache-v5';
+const CACHE_NAME = 'fitted-cache-v6';
 
 const PRECACHE_URLS = [
   './',
@@ -24,6 +24,7 @@ const PRECACHE_URLS = [
   './js/ui/matchView.js',
   './js/ui/aiChatView.js',
   './js/ui/formalityField.js',
+  './js/ui/aiReview.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
 ];
