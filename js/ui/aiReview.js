@@ -6,26 +6,32 @@
 
 import { updateItem } from '../storage.js';
 import { sendMessageWithFallback, getAiConfig, hasPrimaryKey } from '../ai/aiRouter.js';
-import { MAX_SUBCATEGORY_LENGTH } from '../constants.js';
+import { MAX_SUBCATEGORY_LENGTH, CATEGORIES } from '../constants.js';
 import { escapeHtml } from '../domUtil.js';
 import { colorFamily } from '../colorMatch.js';
 import { FORMALITY_LEVELS, FORMALITY_LABELS } from '../matcher.js';
 
-const HEX_RE = /^#[0-9a-f]{6}$/i;
+export const HEX_RE = /^#[0-9a-f]{6}$/i;
 
-function buildPrompt(item) {
+function buildPrompt(item, { includeCategory = false } = {}) {
   const colors = (item.dominantColors || []).map((c) => c.hex).join(', ') || '(none)';
   const formality = item.formality ? FORMALITY_LABELS[item.formality] : '(none)';
-  return `You are reviewing one clothing item photo in a wardrobe app. Current recorded data:
+  const categoryLine = includeCategory ? `\ncategory: ${item.category || '(none)'}` : '';
+  const categoryInstruction = includeCategory
+    ? ` Also suggest a category from exactly this list if it's missing or wrong: ${JSON.stringify(CATEGORIES)}.`
+    : '';
+  const categorySchema = includeCategory ? `, "category": one of ${JSON.stringify(CATEGORIES)} or null` : '';
+
+  return `You are reviewing one clothing item photo in a wardrobe app. Current recorded data:${categoryLine}
 subCategory: ${item.subCategory || '(none)'}
 pattern: ${item.pattern}
 colors: ${colors}
 formality: ${formality}
 
-Look at the actual photo. For pattern, colors, and formality, only suggest a replacement if the current value is clearly wrong or unset - leave it null if it already looks right. For subCategory, also suggest a replacement whenever a more specific, descriptive garment name would help - not only when the current one is wrong. For example, if subCategory is the generic "long pants" but the photo clearly shows chinos, suggest "chinos" even though "long pants" wasn't technically wrong. Leave subCategory null only if it's already reasonably specific. Keep suggestions to a short, common garment name (2-3 words max).
+Look at the actual photo. For pattern, colors, and formality, only suggest a replacement if the current value is clearly wrong or unset - leave it null if it already looks right. For subCategory, also suggest a replacement whenever a more specific, descriptive garment name would help - not only when the current one is wrong. For example, if subCategory is the generic "long pants" but the photo clearly shows chinos, suggest "chinos" even though "long pants" wasn't technically wrong. Leave subCategory null only if it's already reasonably specific. Keep suggestions to a short, common garment name (2-3 words max).${categoryInstruction}
 
 Respond with ONLY JSON, no prose, no markdown fences:
-{"subCategory": "<short name, e.g. \\"chinos\\">" or null, "pattern": "solid" or "patterned" or null, "colors": ["#rrggbb", ...] or null, "formality": one of ${JSON.stringify(FORMALITY_LEVELS)} or null}`;
+{"subCategory": "<short name, e.g. \\"chinos\\">" or null, "pattern": "solid" or "patterned" or null, "colors": ["#rrggbb", ...] or null, "formality": one of ${JSON.stringify(FORMALITY_LEVELS)} or null${categorySchema}}`;
 }
 
 function parseReview(text) {
@@ -36,6 +42,28 @@ function parseReview(text) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Sends a clothing item's photo + currently-recorded fields to the
+ * configured AI provider and returns its parsed suggestion object (or null
+ * if the reply couldn't be parsed as JSON). Shared by the wardrobe detail
+ * view's "Re-check with AI" and the capture form's "Check with AI".
+ *
+ * @param {object} opts
+ * @param {object} opts.config - from getAiConfig()
+ * @param {object} opts.item - {category?, subCategory, pattern, dominantColors, formality}
+ * @param {Blob} opts.thumbnail
+ * @param {boolean} [opts.includeCategory] - also ask for/accept a category
+ *   suggestion; only meaningful before an item has a committed category.
+ */
+export async function fetchAiSuggestions({ config, item, thumbnail, includeCategory = false }) {
+  const reply = await sendMessageWithFallback({
+    config,
+    messages: [{ role: 'user', content: buildPrompt(item, { includeCategory }) }],
+    image: thumbnail,
+  });
+  return parseReview(reply);
 }
 
 /**
@@ -55,12 +83,8 @@ export async function wireAiReview(container, item, resultEl, onChange) {
     resultEl.innerHTML = `<div class="loading-row"><span class="spinner"></span> Looking at the photo…</div>`;
 
     try {
-      const reply = await sendMessageWithFallback({
-        config,
-        messages: [{ role: 'user', content: buildPrompt(item) }],
-        image: item.thumbnail,
-      });
-      renderReviewResult(resultEl, item, parseReview(reply), onChange);
+      const parsed = await fetchAiSuggestions({ config, item, thumbnail: item.thumbnail });
+      renderReviewResult(resultEl, item, parsed, onChange);
     } catch (err) {
       resultEl.innerHTML = `<div class="chat-bubble error">${escapeHtml(err.message || 'Something went wrong.')}</div>`;
     }

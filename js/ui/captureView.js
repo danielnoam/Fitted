@@ -7,6 +7,9 @@ import { seasonFieldHtml } from './seasonField.js';
 import { revokeBlobImagesOnLoad, showToast } from '../domUtil.js';
 import { CATEGORIES, MAX_SUBCATEGORY_LENGTH, MAX_NOTES_LENGTH } from '../constants.js';
 import { colorFamily } from '../colorMatch.js';
+import { FORMALITY_LEVELS } from '../matcher.js';
+import { getAiConfig, hasPrimaryKey } from '../ai/aiRouter.js';
+import { fetchAiSuggestions, HEX_RE } from './aiReview.js';
 
 /**
  * Opens the capture overlay: picks an image, analyzes it, then lets the
@@ -44,21 +47,30 @@ export async function openCapture() {
   renderForm(overlay, file, analysis);
 }
 
+function metaRowHtml(analysis) {
+  return `
+    <span class="pill">${analysis.pattern}</span>
+    ${analysis.dominantColors
+      .map(
+        (c) =>
+          `<span class="swatch" style="background:${c.hex}" title="${c.hex}" role="img" aria-label="${colorFamily(c.hex)} swatch, ${c.hex}"></span>`
+      )
+      .join('')}
+  `;
+}
+
 function renderForm(overlay, file, analysis) {
   const thumbUrl = URL.createObjectURL(analysis.thumbnail);
   const body = overlay.querySelector('.overlay-body');
 
   body.innerHTML = `
     <div class="capture-preview"><img src="${thumbUrl}" alt="Captured item" /></div>
-    <div class="detail-meta-row">
-      <span class="pill">${analysis.pattern}</span>
-      ${analysis.dominantColors
-        .map(
-          (c) =>
-            `<span class="swatch" style="background:${c.hex}" title="${c.hex}" role="img" aria-label="${colorFamily(c.hex)} swatch, ${c.hex}"></span>`
-        )
-        .join('')}
+    <div class="detail-meta-row" id="cap-meta-row">${metaRowHtml(analysis)}</div>
+
+    <div class="btn-row" style="margin:2px 0 16px;">
+      <button type="button" class="btn btn-block" id="cap-ai-check" style="display:none;">🔍 Check with AI</button>
     </div>
+    <div id="cap-ai-check-status" class="loading-row" style="display:none;"></div>
 
     <div class="field">
       <label for="cap-category">Category *</label>
@@ -101,6 +113,7 @@ function renderForm(overlay, file, analysis) {
   };
 
   wireFormalityField(body, 'cap', () => analysis.thumbnail, () => {});
+  wireCaptureAiCheck(body, analysis);
 
   function buildItem() {
     return {
@@ -136,4 +149,71 @@ function renderForm(overlay, file, analysis) {
     overlay.remove();
     openMatchResults(transientItem);
   });
+}
+
+/**
+ * Reveals + wires the capture form's "Check with AI" button (only if a key
+ * is already set) so a fresh capture can be auto-filled from the photo
+ * alone - category, sub-category, formality, and a second opinion on the
+ * pattern/colors already detected from pixels - instead of the user typing
+ * it all by hand and only getting an AI's take after saving.
+ */
+async function wireCaptureAiCheck(body, analysis) {
+  const btn = body.querySelector('#cap-ai-check');
+  const status = body.querySelector('#cap-ai-check-status');
+  if (!btn || !status) return;
+
+  const config = await getAiConfig();
+  if (!hasPrimaryKey(config)) return;
+
+  btn.style.display = '';
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    status.style.display = 'flex';
+    status.innerHTML = '<span class="spinner"></span> Looking at the photo…';
+    try {
+      const parsed = await fetchAiSuggestions({
+        config,
+        item: {
+          subCategory: body.querySelector('#cap-subcategory').value.trim(),
+          pattern: analysis.pattern,
+          dominantColors: analysis.dominantColors,
+          formality: body.querySelector('#cap-formality').value || null,
+        },
+        thumbnail: analysis.thumbnail,
+        includeCategory: true,
+      });
+      applyCaptureSuggestions(body, analysis, parsed);
+      status.style.display = 'none';
+    } catch (err) {
+      status.textContent = err.message || 'Something went wrong.';
+    }
+    btn.disabled = false;
+  });
+}
+
+function applyCaptureSuggestions(body, analysis, parsed) {
+  if (!parsed) return;
+
+  if (typeof parsed.category === 'string' && CATEGORIES.includes(parsed.category)) {
+    body.querySelector('#cap-category').value = parsed.category;
+  }
+  if (typeof parsed.subCategory === 'string' && parsed.subCategory.trim()) {
+    body.querySelector('#cap-subcategory').value = parsed.subCategory.trim().slice(0, MAX_SUBCATEGORY_LENGTH);
+  }
+  if (parsed.pattern === 'solid' || parsed.pattern === 'patterned') {
+    analysis.pattern = parsed.pattern;
+  }
+  if (Array.isArray(parsed.colors)) {
+    const validHexes = parsed.colors.filter((h) => typeof h === 'string' && HEX_RE.test(h)).slice(0, 3);
+    if (validHexes.length) {
+      analysis.dominantColors = validHexes.map((hex) => ({ hex, ratio: +(1 / validHexes.length).toFixed(3) }));
+    }
+  }
+  if (typeof parsed.formality === 'string' && FORMALITY_LEVELS.includes(parsed.formality)) {
+    body.querySelector('#cap-formality').value = parsed.formality;
+  }
+
+  const metaRow = body.querySelector('#cap-meta-row');
+  if (metaRow) metaRow.innerHTML = metaRowHtml(analysis);
 }

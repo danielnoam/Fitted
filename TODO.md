@@ -131,6 +131,25 @@ Run with `npm test` (Node's built-in `node:test` runner, no build step).
 - [x] Added an "Apply all" button to the AI-review panel when there's more
       than one pending suggestion, so fixes don't have to be applied one
       at a time.
+- [x] Fixed the AI-thinking nav badge disappearing prematurely: navigating
+      back to the AI tab *while* a chat reply or cleanup scan was still in
+      flight rendered fresh from stale state (no pending indicator), and
+      the eventual result landed in an already-replaced, invisible DOM
+      node — requiring an extra leave-and-return to ever see it. Threads
+      and the cleanup scan now track `pending`/error state persistently
+      (not just in the triggering render's closure), and a new
+      `fitted:ai-content-updated` event (mirroring `fitted:wardrobe-changed`)
+      re-renders the AI tab automatically if it's still the active one
+      when a reply/scan finishes in the background. Also confirmed the
+      wardrobe tab stays fully interactive the whole time.
+- [x] "Check with AI" now lives in the capture form too, not just after
+      saving: a new button on the new-item form (`captureView.js`) sends
+      the just-taken photo and auto-fills category, sub-category,
+      formality, and a second opinion on the already-detected pattern/
+      colors — instead of typing everything by hand and only getting an
+      AI opinion via a later "Re-check". Shares `aiReview.js`'s prompt/
+      parsing logic (now exported as `fetchAiSuggestions`) with an
+      `includeCategory` option, since an unsaved item has no category yet.
 
 ## Also considered, not queued
 

@@ -9,19 +9,34 @@ function setAiThinking(thinking) {
   document.dispatchEvent(new CustomEvent('fitted:ai-thinking', { detail: { thinking } }));
 }
 
+/**
+ * Dispatched whenever a thread's messages or the cleanup scan's results
+ * change in the background - main.js re-renders the AI tab if it's still
+ * the active one. Without this, returning to the AI tab *while* a reply or
+ * scan is still in flight would show a stale render with no pending
+ * indicator (the "Thinking…" bubble only existed in the original render's
+ * closure), and the eventual result would land in a DOM node that render
+ * had already replaced - invisible until leaving and coming back once more.
+ */
+function notifyAiContentUpdated() {
+  document.dispatchEvent(new CustomEvent('fitted:ai-content-updated'));
+}
+
 const FIXABLE_FIELDS = ['category', 'subCategory', 'pattern', 'notes'];
 
-const generalThread = { messages: [] };
-const itemThreads = new Map(); // itemId -> { item, messages: [], imageSent: bool }
+const generalThread = { messages: [], pending: false };
+const itemThreads = new Map(); // itemId -> { item, messages: [], imageSent: bool, pending: bool }
 
 let focusedItemId = null;
 let cleanupMode = false;
+let cleanupPending = false;
 let lastCleanupSuggestions = null; // cached so revisiting the tab doesn't re-call the API
 let lastCleanupItems = null;
+let lastCleanupError = null;
 
 export function openItemChat(item) {
   if (!itemThreads.has(item.id)) {
-    itemThreads.set(item.id, { item, messages: [], imageSent: false });
+    itemThreads.set(item.id, { item, messages: [], imageSent: false, pending: false });
   }
   focusedItemId = item.id;
   cleanupMode = false;
@@ -125,7 +140,9 @@ function renderSettings(container, config) {
 
 function renderChat(container, config) {
   const focused = focusedItemId ? itemThreads.get(focusedItemId) : null;
-  const thread = focused ? focused.messages : generalThread.messages;
+  const threadObj = focused || generalThread;
+  const thread = threadObj.messages;
+  const pending = threadObj.pending;
 
   container.innerHTML = `
     <div class="chat-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -136,11 +153,11 @@ function renderChat(container, config) {
     </div>
     ${focused ? itemContextHtml(focused.item) : ''}
     <div class="chat-thread" id="chat-thread">
-      ${thread.length ? thread.map(chatBubbleHtml).join('') : emptyThreadHtml(focused)}
+      ${thread.length || pending ? thread.map(chatBubbleHtml).join('') + (pending ? pendingBubbleHtml() : '') : emptyThreadHtml(focused)}
     </div>
     <div class="chat-input-bar">
-      <textarea id="chat-input" rows="1" placeholder="${focused ? 'Ask about this item…' : 'Ask about your wardrobe…'}"></textarea>
-      <button class="btn btn-primary" id="chat-send">Send</button>
+      <textarea id="chat-input" rows="1" placeholder="${focused ? 'Ask about this item…' : 'Ask about your wardrobe…'}" ${pending ? 'disabled' : ''}></textarea>
+      <button class="btn btn-primary" id="chat-send" ${pending ? 'disabled' : ''}>Send</button>
     </div>
   `;
 
@@ -171,7 +188,9 @@ function renderChat(container, config) {
     container.querySelector('#chat-send').disabled = true;
 
     thread.push({ role: 'user', content: text });
+    threadObj.pending = true;
     renderThreadOnly(container, thread, focused, true);
+    notifyAiContentUpdated();
 
     setAiThinking(true);
     try {
@@ -187,10 +206,13 @@ function renderChat(container, config) {
       thread.push({ role: 'assistant', content: err.message || 'Something went wrong.', isError: true });
     }
     setAiThinking(false);
+    threadObj.pending = false;
+    notifyAiContentUpdated();
 
     // The user may have navigated away (and possibly back to a different
-    // thread) while the reply was in flight, detaching this render's DOM -
-    // only touch it if it's still the live one.
+    // thread, which re-renders fresh from threadObj/pending above) while
+    // the reply was in flight, detaching this render's DOM - only touch it
+    // if it's still the live one.
     if (document.body.contains(input)) {
       renderThreadOnly(container, thread, focused);
       input.disabled = false;
@@ -212,11 +234,12 @@ function renderThreadOnly(container, thread, focused, pending = false) {
   const threadEl = container.querySelector('#chat-thread');
   if (!threadEl) return;
   const bubbles = thread.map(chatBubbleHtml).join('');
-  const pendingHtml = pending
-    ? `<div class="chat-bubble assistant pending"><span class="spinner"></span> Thinking…</div>`
-    : '';
-  threadEl.innerHTML = thread.length || pending ? bubbles + pendingHtml : emptyThreadHtml(focused);
+  threadEl.innerHTML = thread.length || pending ? bubbles + (pending ? pendingBubbleHtml() : '') : emptyThreadHtml(focused);
   threadEl.scrollTop = threadEl.scrollHeight;
+}
+
+function pendingBubbleHtml() {
+  return `<div class="chat-bubble assistant pending"><span class="spinner"></span> Thinking…</div>`;
 }
 
 function itemContextHtml(item) {
@@ -286,7 +309,7 @@ async function renderCleanup(container, config) {
       until you tap Apply on a suggestion.
     </p>
     <div class="btn-row cleanup-btn-row">
-      <button class="btn btn-primary btn-block" id="cleanup-scan">${lastCleanupSuggestions ? 'Re-scan wardrobe' : 'Scan wardrobe'}</button>
+      <button class="btn btn-primary btn-block" id="cleanup-scan" ${cleanupPending ? 'disabled' : ''}>${lastCleanupSuggestions ? 'Re-scan wardrobe' : 'Scan wardrobe'}</button>
     </div>
     <div id="cleanup-result"></div>
   `;
@@ -298,8 +321,13 @@ async function renderCleanup(container, config) {
 
   container.querySelector('#cleanup-scan').addEventListener('click', () => runCleanupScan(container, config));
 
-  if (lastCleanupSuggestions) {
-    renderSuggestions(container.querySelector('#cleanup-result'), lastCleanupSuggestions, lastCleanupItems);
+  const resultEl = container.querySelector('#cleanup-result');
+  if (cleanupPending) {
+    resultEl.innerHTML = `<div class="loading-row"><span class="spinner"></span> Reviewing your wardrobe…</div>`;
+  } else if (lastCleanupError) {
+    resultEl.innerHTML = `<div class="chat-bubble error">${escapeHtml(lastCleanupError)}</div>`;
+  } else if (lastCleanupSuggestions) {
+    renderSuggestions(resultEl, lastCleanupSuggestions, lastCleanupItems);
   }
 }
 
@@ -315,17 +343,32 @@ async function runCleanupScan(container, config) {
 
   const prompt = buildCleanupPrompt(items);
 
+  cleanupPending = true;
+  lastCleanupError = null;
   setAiThinking(true);
+  notifyAiContentUpdated();
   try {
     const reply = await sendMessageWithFallback({ config, messages: [{ role: 'user', content: prompt }] });
-    const suggestions = parseSuggestions(reply);
-    lastCleanupSuggestions = suggestions;
+    lastCleanupSuggestions = parseSuggestions(reply);
     lastCleanupItems = items;
-    renderSuggestions(resultEl, suggestions, items);
   } catch (err) {
-    resultEl.innerHTML = `<div class="chat-bubble error">${escapeHtml(err.message || 'Something went wrong.')}</div>`;
+    lastCleanupError = err.message || 'Something went wrong.';
   }
   setAiThinking(false);
+  cleanupPending = false;
+  notifyAiContentUpdated();
+
+  // Best-effort immediate feedback if the user is still looking at this
+  // exact render; if they navigated away and back, notifyAiContentUpdated()
+  // above already triggered a fresh renderCleanup() that reads the same
+  // module state this just set.
+  if (document.body.contains(resultEl)) {
+    if (lastCleanupError) {
+      resultEl.innerHTML = `<div class="chat-bubble error">${escapeHtml(lastCleanupError)}</div>`;
+    } else {
+      renderSuggestions(resultEl, lastCleanupSuggestions, lastCleanupItems);
+    }
+  }
 }
 
 function buildCleanupPrompt(items) {

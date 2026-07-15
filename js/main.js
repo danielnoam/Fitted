@@ -60,6 +60,14 @@ document.addEventListener('fitted:wardrobe-changed', () => {
   if (currentTab === 'wardrobe') renderTab('wardrobe');
 });
 
+// A chat reply or wardrobe-cleanup scan finished (or just started) in the
+// background - if the AI tab is still the one on screen, re-render it so it
+// picks up the pending/result state instead of showing whatever was there
+// when the user last looked (see aiChatView.js's notifyAiContentUpdated).
+document.addEventListener('fitted:ai-content-updated', () => {
+  if (currentTab === 'ai') renderTab('ai');
+});
+
 document.addEventListener('fitted:switch-tab', (e) => {
   renderTab(e.detail.tab);
 });
