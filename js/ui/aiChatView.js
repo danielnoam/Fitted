@@ -1,5 +1,5 @@
-import { getAllItems, getSetting, setSetting, updateItem, deleteItem } from '../storage.js';
-import { sendMessage, PROVIDERS, DEFAULT_PROVIDER } from '../ai/aiRouter.js';
+import { getAllItems, updateItem, deleteItem } from '../storage.js';
+import { sendMessageWithFallback, getAiConfig, setAiConfig, hasPrimaryKey, PROVIDERS, DEFAULT_PROVIDER } from '../ai/aiRouter.js';
 
 const CATEGORIES = ['top', 'bottom', 'outerwear', 'shoes', 'accessory'];
 const PATTERNS = ['solid', 'patterned'];
@@ -23,70 +23,108 @@ export function openItemChat(item) {
 }
 
 export async function render(container) {
-  const apiKey = await getSetting('aiApiKey');
-  const provider = await getSetting('aiProvider', DEFAULT_PROVIDER);
+  const config = await getAiConfig();
 
-  if (!apiKey) {
-    renderSetup(container, provider);
+  if (!hasPrimaryKey(config)) {
+    renderSettings(container, config);
     return;
   }
 
   if (cleanupMode) {
-    renderCleanup(container, provider, apiKey);
+    renderCleanup(container, config);
     return;
   }
 
-  renderChat(container, provider, apiKey);
+  renderChat(container, config);
 }
 
-function renderSetup(container, currentProvider) {
+function providerOptionsHtml(selected, excludeId) {
+  return Object.values(PROVIDERS)
+    .filter((p) => p.id !== excludeId)
+    .map((p) => `<option value="${p.id}" ${p.id === selected ? 'selected' : ''}>${p.label}</option>`)
+    .join('');
+}
+
+function renderSettings(container, config) {
+  const primary = config?.primary ?? { provider: DEFAULT_PROVIDER, apiKey: '' };
+  const fallback = config?.fallback ?? null;
+
   container.innerHTML = `
     <div class="ai-setup">
-      <p class="section-title">Connect an AI provider</p>
+      <p class="section-title">AI provider</p>
       <p>
         Optional. Add your own API key to unlock open-ended styling advice and
         wardrobe chat. The rest of Fitted works fully offline without this —
-        your key never leaves your browser (stored in IndexedDB only).
+        keys never leave your browser (stored in IndexedDB only).
       </p>
       <div class="field">
-        <label for="ai-provider">Provider</label>
-        <select id="ai-provider">
-          ${Object.values(PROVIDERS)
-            .map(
-              (p) =>
-                `<option value="${p.id}" ${p.id === currentProvider ? 'selected' : ''}>${p.label}</option>`
-            )
-            .join('')}
-        </select>
+        <label for="ai-provider-primary">Primary provider</label>
+        <select id="ai-provider-primary">${providerOptionsHtml(primary.provider)}</select>
       </div>
       <div class="field">
-        <label for="ai-key">API key</label>
-        <input type="password" id="ai-key" placeholder="Paste your API key" autocomplete="off" />
+        <label for="ai-key-primary">Primary API key</label>
+        <input type="password" id="ai-key-primary" placeholder="Paste your API key" autocomplete="off" value="${escapeHtml(primary.apiKey || '')}" />
       </div>
+      <div class="field">
+        <label for="ai-provider-fallback">Fallback provider (optional)</label>
+        <select id="ai-provider-fallback">
+          <option value="">None</option>
+          ${providerOptionsHtml(fallback?.provider ?? '', primary.provider)}
+        </select>
+      </div>
+      <div class="field" id="ai-fallback-key-field" style="${fallback ? '' : 'display:none;'}">
+        <label for="ai-key-fallback">Fallback API key</label>
+        <input type="password" id="ai-key-fallback" placeholder="Paste your API key" autocomplete="off" value="${escapeHtml(fallback?.apiKey || '')}" />
+      </div>
+      <p style="font-size:12px;color:var(--text-dim);margin:-4px 0 14px;">
+        If the primary provider errors out or returns nothing, Fitted automatically retries with the fallback.
+      </p>
       <button class="btn btn-primary btn-block" id="ai-save">Save & continue</button>
+      ${hasPrimaryKey(config) ? '<button class="btn btn-block" id="ai-cancel" style="margin-top:10px;">Cancel</button>' : ''}
     </div>
   `;
 
+  const primarySelect = container.querySelector('#ai-provider-primary');
+  const fallbackSelect = container.querySelector('#ai-provider-fallback');
+  const fallbackKeyField = container.querySelector('#ai-fallback-key-field');
+
+  primarySelect.addEventListener('change', () => {
+    const keep = fallbackSelect.value !== primarySelect.value ? fallbackSelect.value : '';
+    fallbackSelect.innerHTML = `<option value="">None</option>${providerOptionsHtml(keep, primarySelect.value)}`;
+    fallbackKeyField.style.display = fallbackSelect.value ? '' : 'none';
+  });
+
+  fallbackSelect.addEventListener('change', () => {
+    fallbackKeyField.style.display = fallbackSelect.value ? '' : 'none';
+  });
+
   container.querySelector('#ai-save').addEventListener('click', async () => {
-    const provider = container.querySelector('#ai-provider').value;
-    const key = container.querySelector('#ai-key').value.trim();
-    if (!key) return;
-    await setSetting('aiProvider', provider);
-    await setSetting('aiApiKey', key);
+    const primaryProvider = primarySelect.value;
+    const primaryKey = container.querySelector('#ai-key-primary').value.trim();
+    if (!primaryKey) return;
+
+    const fallbackProvider = fallbackSelect.value;
+    const fallbackKey = container.querySelector('#ai-key-fallback').value.trim();
+
+    await setAiConfig({
+      primary: { provider: primaryProvider, apiKey: primaryKey },
+      fallback: fallbackProvider && fallbackKey ? { provider: fallbackProvider, apiKey: fallbackKey } : null,
+    });
     render(container);
   });
+
+  container.querySelector('#ai-cancel')?.addEventListener('click', () => render(container));
 }
 
-function renderChat(container, provider, apiKey) {
+function renderChat(container, config) {
   const focused = focusedItemId ? itemThreads.get(focusedItemId) : null;
   const thread = focused ? focused.messages : generalThread.messages;
 
   container.innerHTML = `
     <div class="chat-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <span class="pill">${PROVIDERS[provider]?.label ?? provider}</span>
+      <button class="btn" id="ai-settings">${PROVIDERS[config.primary.provider]?.label ?? config.primary.provider}</button>
       <div style="display:flex;gap:8px;">
         ${focused ? '<button class="btn" id="ai-back">← General chat</button>' : '<button class="btn" id="ai-cleanup">🧹 Clean up wardrobe</button>'}
-        <button class="btn" id="ai-change-key">Change key</button>
       </div>
     </div>
     ${focused ? itemContextHtml(focused.item) : ''}
@@ -102,8 +140,8 @@ function renderChat(container, provider, apiKey) {
   const threadEl = container.querySelector('#chat-thread');
   threadEl.scrollTop = threadEl.scrollHeight;
 
-  container.querySelector('#ai-change-key')?.addEventListener('click', async () => {
-    renderSetup(container, provider);
+  container.querySelector('#ai-settings')?.addEventListener('click', () => {
+    renderSettings(container, config);
   });
 
   container.querySelector('#ai-back')?.addEventListener('click', () => {
@@ -134,7 +172,7 @@ function renderChat(container, provider, apiKey) {
         image = focused.item.thumbnail;
         focused.imageSent = true;
       }
-      const reply = await sendMessage({ provider, apiKey, systemPrompt, messages: thread, image });
+      const reply = await sendMessageWithFallback({ config, systemPrompt, messages: thread, image });
       thread.push({ role: 'assistant', content: reply });
     } catch (err) {
       thread.push({ role: 'assistant', content: err.message || 'Something went wrong.', isError: true });
@@ -224,10 +262,10 @@ async function buildSystemPrompt(focusedItem) {
 
 // ---------- Wardrobe cleanup ----------
 
-async function renderCleanup(container, provider, apiKey) {
+async function renderCleanup(container, config) {
   container.innerHTML = `
     <div class="chat-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <span class="pill">${PROVIDERS[provider]?.label ?? provider}</span>
+      <span class="pill">${PROVIDERS[config.primary.provider]?.label ?? config.primary.provider}</span>
       <button class="btn" id="cleanup-back">← Back to chat</button>
     </div>
     <p class="section-title">Clean up wardrobe</p>
@@ -247,14 +285,14 @@ async function renderCleanup(container, provider, apiKey) {
     render(container);
   });
 
-  container.querySelector('#cleanup-scan').addEventListener('click', () => runCleanupScan(container, provider, apiKey));
+  container.querySelector('#cleanup-scan').addEventListener('click', () => runCleanupScan(container, config));
 
   if (lastCleanupSuggestions) {
     renderSuggestions(container.querySelector('#cleanup-result'), lastCleanupSuggestions, lastCleanupItems);
   }
 }
 
-async function runCleanupScan(container, provider, apiKey) {
+async function runCleanupScan(container, config) {
   const resultEl = container.querySelector('#cleanup-result');
   resultEl.innerHTML = `<div class="loading-row"><span class="spinner"></span> Reviewing your wardrobe…</div>`;
 
@@ -267,7 +305,7 @@ async function runCleanupScan(container, provider, apiKey) {
   const prompt = buildCleanupPrompt(items);
 
   try {
-    const reply = await sendMessage({ provider, apiKey, messages: [{ role: 'user', content: prompt }] });
+    const reply = await sendMessageWithFallback({ config, messages: [{ role: 'user', content: prompt }] });
     const suggestions = parseSuggestions(reply);
     lastCleanupSuggestions = suggestions;
     lastCleanupItems = items;

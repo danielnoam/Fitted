@@ -1,8 +1,7 @@
 // Shared formality <select> + "Suggest with AI" button, used by both the
 // capture form and the wardrobe item detail view.
 
-import { getSetting } from '../storage.js';
-import { classifyFormality, DEFAULT_PROVIDER } from '../ai/aiRouter.js';
+import { classifyFormality, getAiConfig, hasPrimaryKey } from '../ai/aiRouter.js';
 import { FORMALITY_LEVELS, FORMALITY_LABELS } from '../matcher.js';
 
 export function formalityFieldHtml(idPrefix, currentValue) {
@@ -41,9 +40,8 @@ export async function wireFormalityField(container, idPrefix, getImage, onChange
 
   select.addEventListener('change', () => onChange(select.value || null));
 
-  const apiKey = await getSetting('aiApiKey');
-  if (!apiKey) return;
-  const provider = await getSetting('aiProvider', DEFAULT_PROVIDER);
+  const config = await getAiConfig();
+  if (!hasPrimaryKey(config)) return;
 
   btn.style.display = '';
   btn.addEventListener('click', async () => {
@@ -51,7 +49,7 @@ export async function wireFormalityField(container, idPrefix, getImage, onChange
     status.style.display = 'flex';
     status.innerHTML = '<span class="spinner"></span> Looking at the photo…';
     try {
-      const result = await classifyFormality({ provider, apiKey, image: getImage() });
+      const result = await classifyFormality({ config, image: getImage() });
       if (result) {
         select.value = result;
         onChange(result);

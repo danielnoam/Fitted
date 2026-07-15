@@ -3,8 +3,8 @@
 // subCategory/pattern/colors, the same deterministic values the app
 // otherwise derives from pixels alone.
 
-import { getSetting, updateItem } from '../storage.js';
-import { sendMessage, DEFAULT_PROVIDER } from '../ai/aiRouter.js';
+import { updateItem } from '../storage.js';
+import { sendMessageWithFallback, getAiConfig, hasPrimaryKey } from '../ai/aiRouter.js';
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;
 
@@ -37,9 +37,8 @@ export async function wireAiReview(container, item, resultEl, onChange) {
   const btn = container.querySelector('#detail-ai-review');
   if (!btn) return;
 
-  const apiKey = await getSetting('aiApiKey');
-  if (!apiKey) return;
-  const provider = await getSetting('aiProvider', DEFAULT_PROVIDER);
+  const config = await getAiConfig();
+  if (!hasPrimaryKey(config)) return;
 
   btn.style.display = '';
   btn.addEventListener('click', async () => {
@@ -47,9 +46,8 @@ export async function wireAiReview(container, item, resultEl, onChange) {
     resultEl.innerHTML = `<div class="loading-row"><span class="spinner"></span> Looking at the photo…</div>`;
 
     try {
-      const reply = await sendMessage({
-        provider,
-        apiKey,
+      const reply = await sendMessageWithFallback({
+        config,
         messages: [{ role: 'user', content: buildPrompt(item) }],
         image: item.thumbnail,
       });
