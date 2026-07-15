@@ -202,13 +202,13 @@ export function openItemDetail(item, { onChange } = {}) {
     </div>
     <div class="overlay-body">
       <div class="detail-thumb"><img src="${thumbUrl}" alt="${item.category}" /></div>
-      <div class="detail-meta-row">
-        <span class="pill">${item.pattern}</span>
-        ${item.subCategory ? `<span class="pill">${escapeHtml(item.subCategory)}</span>` : ''}
+      <div class="detail-meta-row" id="detail-pattern-row">
+        <span class="pill" id="detail-pattern-pill">${item.pattern}</span>
+        ${item.subCategory ? `<span class="pill" id="detail-subcategory-pill">${escapeHtml(item.subCategory)}</span>` : ''}
       </div>
-      <div class="detail-meta-row">${renderSwatches(item.dominantColors, 'lg')}</div>
+      <div class="detail-meta-row" id="detail-swatches-row">${renderSwatches(item.dominantColors, 'lg')}</div>
       ${item.notes ? `<p style="color:var(--text-dim);font-size:14px;">${escapeHtml(item.notes)}</p>` : ''}
-      ${formalityFieldHtml('detail', item.formality || null)}
+      ${formalityFieldHtml('detail', item.formality || null, { showAiSuggest: false })}
       ${seasonFieldHtml('detail', item.season || null)}
       <p style="color:var(--text-dim);font-size:13px;margin:4px 0 0;">
         ${item.lastWorn ? `Last worn: ${formatRelativeDate(item.lastWorn)}` : 'Not worn yet'}
@@ -240,10 +240,38 @@ export function openItemDetail(item, { onChange } = {}) {
   revokeBlobImagesOnLoad(overlay);
 
   // Closes and reopens the detail overlay so the thumbnail/pills/swatches
-  // reflect whatever an AI review or retake just changed on `item`.
+  // reflect whatever a retake just changed on `item`.
   const refreshDetail = () => {
     overlay.remove();
     openItemDetail(item, { onChange });
+  };
+
+  // Lighter-weight than refreshDetail(): patches just the pattern/sub-category
+  // pills, swatches, and formality select in place after an AI-review apply,
+  // without tearing down the whole overlay - which would also wipe out any
+  // other still-pending review suggestions the user hasn't acted on yet.
+  const syncDetailSummary = () => {
+    const patternPill = overlay.querySelector('#detail-pattern-pill');
+    if (patternPill) patternPill.textContent = item.pattern;
+
+    const subCategoryPill = overlay.querySelector('#detail-subcategory-pill');
+    if (item.subCategory) {
+      if (subCategoryPill) {
+        subCategoryPill.textContent = item.subCategory;
+      } else {
+        overlay
+          .querySelector('#detail-pattern-row')
+          .insertAdjacentHTML('beforeend', `<span class="pill" id="detail-subcategory-pill">${escapeHtml(item.subCategory)}</span>`);
+      }
+    } else {
+      subCategoryPill?.remove();
+    }
+
+    const swatchesRow = overlay.querySelector('#detail-swatches-row');
+    if (swatchesRow) swatchesRow.innerHTML = renderSwatches(item.dominantColors, 'lg');
+
+    const formalitySelect = overlay.querySelector('#detail-formality');
+    if (formalitySelect) formalitySelect.value = item.formality || '';
   };
 
   overlay.querySelector('#detail-close').addEventListener('click', () => overlay.remove());
@@ -263,7 +291,7 @@ export function openItemDetail(item, { onChange } = {}) {
     item.formality = value;
     await updateItem(item);
     onChange?.();
-  });
+  }, { showAiSuggest: false });
 
   wireSeasonField(overlay, 'detail', async (value) => {
     item.season = value;
@@ -279,7 +307,7 @@ export function openItemDetail(item, { onChange } = {}) {
 
   wireAiReview(overlay, item, overlay.querySelector('#detail-ai-review-result'), () => {
     onChange?.();
-    refreshDetail();
+    syncDetailSummary();
   });
 
   overlay.querySelector('#detail-retake').addEventListener('click', async () => {

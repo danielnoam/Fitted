@@ -4,7 +4,15 @@
 import { classifyFormality, getAiConfig, hasPrimaryKey } from '../ai/aiRouter.js';
 import { FORMALITY_LEVELS, FORMALITY_LABELS } from '../matcher.js';
 
-export function formalityFieldHtml(idPrefix, currentValue) {
+/**
+ * @param {string} idPrefix
+ * @param {string|null} currentValue
+ * @param {{showAiSuggest?: boolean}} [opts] - the capture form has no other
+ *   way to get an AI opinion before the item is saved, so it keeps the
+ *   inline "Suggest" button; the wardrobe detail view has "Re-check with
+ *   AI" for that instead, so it passes showAiSuggest: false to skip it.
+ */
+export function formalityFieldHtml(idPrefix, currentValue, { showAiSuggest = true } = {}) {
   return `
     <div class="field">
       <label for="${idPrefix}-formality">Formality (optional)</label>
@@ -15,30 +23,33 @@ export function formalityFieldHtml(idPrefix, currentValue) {
             (f) => `<option value="${f}" ${currentValue === f ? 'selected' : ''}>${FORMALITY_LABELS[f]}</option>`
           ).join('')}
         </select>
-        <button type="button" class="btn" id="${idPrefix}-suggest-formality" style="display:none;white-space:nowrap;">✨ Suggest</button>
+        ${showAiSuggest ? `<button type="button" class="btn" id="${idPrefix}-suggest-formality" style="display:none;white-space:nowrap;">✨ Suggest</button>` : ''}
       </div>
-      <div id="${idPrefix}-formality-status" class="loading-row" style="padding:4px 0 0;display:none;"></div>
+      ${showAiSuggest ? `<div id="${idPrefix}-formality-status" class="loading-row" style="padding:4px 0 0;display:none;"></div>` : ''}
     </div>
   `;
 }
 
 /**
- * Wires the formality select's change handler, and reveals + wires the
- * "Suggest with AI" button only if an API key is already set (the rest of
- * the app must keep working with no key, so this is purely additive).
+ * Wires the formality select's change handler, and (unless showAiSuggest is
+ * false) reveals + wires the "Suggest with AI" button when an API key is
+ * already set.
  *
  * @param {HTMLElement} container
  * @param {string} idPrefix - must match what was passed to formalityFieldHtml
  * @param {() => Blob} getImage - returns the item's thumbnail blob on demand
  * @param {(value: string|null) => void} onChange
+ * @param {{showAiSuggest?: boolean}} [opts]
  */
-export async function wireFormalityField(container, idPrefix, getImage, onChange) {
+export async function wireFormalityField(container, idPrefix, getImage, onChange, { showAiSuggest = true } = {}) {
   const select = container.querySelector(`#${idPrefix}-formality`);
+  if (!select) return;
+  select.addEventListener('change', () => onChange(select.value || null));
+  if (!showAiSuggest) return;
+
   const btn = container.querySelector(`#${idPrefix}-suggest-formality`);
   const status = container.querySelector(`#${idPrefix}-formality-status`);
-  if (!select || !btn || !status) return;
-
-  select.addEventListener('change', () => onChange(select.value || null));
+  if (!btn || !status) return;
 
   const config = await getAiConfig();
   if (!hasPrimaryKey(config)) return;

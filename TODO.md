@@ -111,6 +111,27 @@ Run with `npm test` (Node's built-in `node:test` runner, no build step).
 - [ ] Lint/format config (ESLint + Prettier or Biome) now that there's a
       `package.json` — would catch things like unused imports before they ship.
 
+## AI-review UX fixes (user feedback)
+
+- [x] Removed the standalone formality "✨ Suggest" button from the wardrobe
+      **detail** view (`formalityField.js` now takes a `showAiSuggest`
+      option) — it was a second, confusing AI entry point once "Re-check
+      with AI" existed. Kept it in the capture form, since there's no
+      "check with AI" alternative before the item is saved.
+- [x] "Re-check with AI" (`aiReview.js`) now also suggests formality (the
+      one thing the standalone button used to cover), and its prompt asks
+      for a more *descriptive* sub-category even when the current one
+      isn't wrong (e.g. "long pants" -> "chinos"), not just corrections.
+- [x] Fixed the bug where applying one AI-review suggestion wiped out the
+      other still-pending ones: `wardrobeView.js` was tearing down and
+      re-creating the whole detail overlay (`refreshDetail()`) on every
+      apply. It now only patches the pattern/sub-category pills, swatches,
+      and formality select in place (`syncDetailSummary()`), leaving the
+      rest of the AI-review panel untouched.
+- [x] Added an "Apply all" button to the AI-review panel when there's more
+      than one pending suggestion, so fixes don't have to be applied one
+      at a time.
+
 ## Also considered, not queued
 
 - Export/import wardrobe data (JSON backup, since everything lives in

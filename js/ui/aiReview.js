@@ -1,25 +1,31 @@
 // "Re-check with AI" for a single wardrobe item: sends its actual photo
 // (not just the recorded text) and offers per-field Apply/Dismiss fixes for
-// subCategory/pattern/colors, the same deterministic values the app
-// otherwise derives from pixels alone.
+// subCategory/pattern/colors/formality, the same deterministic values the
+// app otherwise derives from pixels alone (formality is the one exception -
+// there's no pixel-based formality detector, so this is its only AI check).
 
 import { updateItem } from '../storage.js';
 import { sendMessageWithFallback, getAiConfig, hasPrimaryKey } from '../ai/aiRouter.js';
 import { MAX_SUBCATEGORY_LENGTH } from '../constants.js';
 import { escapeHtml } from '../domUtil.js';
 import { colorFamily } from '../colorMatch.js';
+import { FORMALITY_LEVELS, FORMALITY_LABELS } from '../matcher.js';
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;
 
 function buildPrompt(item) {
   const colors = (item.dominantColors || []).map((c) => c.hex).join(', ') || '(none)';
+  const formality = item.formality ? FORMALITY_LABELS[item.formality] : '(none)';
   return `You are reviewing one clothing item photo in a wardrobe app. Current recorded data:
 subCategory: ${item.subCategory || '(none)'}
 pattern: ${item.pattern}
 colors: ${colors}
+formality: ${formality}
 
-Look at the actual photo and suggest corrections only for fields that are clearly wrong - leave a field null if the current guess already looks right. Respond with ONLY JSON, no prose, no markdown fences:
-{"subCategory": "<short name, e.g. \\"t-shirt\\">" or null, "pattern": "solid" or "patterned" or null, "colors": ["#rrggbb", ...] or null}`;
+Look at the actual photo. For pattern, colors, and formality, only suggest a replacement if the current value is clearly wrong or unset - leave it null if it already looks right. For subCategory, also suggest a replacement whenever a more specific, descriptive garment name would help - not only when the current one is wrong. For example, if subCategory is the generic "long pants" but the photo clearly shows chinos, suggest "chinos" even though "long pants" wasn't technically wrong. Leave subCategory null only if it's already reasonably specific. Keep suggestions to a short, common garment name (2-3 words max).
+
+Respond with ONLY JSON, no prose, no markdown fences:
+{"subCategory": "<short name, e.g. \\"chinos\\">" or null, "pattern": "solid" or "patterned" or null, "colors": ["#rrggbb", ...] or null, "formality": one of ${JSON.stringify(FORMALITY_LEVELS)} or null}`;
 }
 
 function parseReview(text) {
@@ -76,6 +82,15 @@ function renderReviewResult(resultEl, item, parsed, onChange) {
   if ((parsed.pattern === 'solid' || parsed.pattern === 'patterned') && parsed.pattern !== item.pattern) {
     fieldFixes.push({ field: 'pattern', label: 'Pattern', current: item.pattern, suggested: parsed.pattern });
   }
+  if (typeof parsed.formality === 'string' && FORMALITY_LEVELS.includes(parsed.formality) && parsed.formality !== item.formality) {
+    fieldFixes.push({
+      field: 'formality',
+      label: 'Formality',
+      current: item.formality ? FORMALITY_LABELS[item.formality] : '(not set)',
+      suggested: FORMALITY_LABELS[parsed.formality],
+      value: parsed.formality, // the enum key to actually store - "suggested" above is just the display label
+    });
+  }
 
   let colorSuggestion = null;
   if (Array.isArray(parsed.colors)) {
@@ -90,7 +105,10 @@ function renderReviewResult(resultEl, item, parsed, onChange) {
     return;
   }
 
+  const totalSuggestions = fieldFixes.length + (colorSuggestion ? 1 : 0);
+
   resultEl.innerHTML = `<div class="suggestion-list">
+    ${totalSuggestions > 1 ? applyAllButtonHtml() : ''}
     ${fieldFixes.map(fieldCardHtml).join('')}
     ${colorSuggestion ? colorCardHtml(item.dominantColors, colorSuggestion) : ''}
   </div>`;
@@ -98,12 +116,16 @@ function renderReviewResult(resultEl, item, parsed, onChange) {
   fieldFixes.forEach((c) => {
     const card = resultEl.querySelector(`[data-field="${c.field}"]`);
     card.querySelector('.review-apply').addEventListener('click', async () => {
-      item[c.field] = c.suggested;
+      item[c.field] = c.value ?? c.suggested;
       await updateItem(item);
       onChange();
       markCardApplied(card);
+      updateApplyAllVisibility(resultEl);
     });
-    card.querySelector('.review-dismiss').addEventListener('click', () => card.remove());
+    card.querySelector('.review-dismiss').addEventListener('click', () => {
+      card.remove();
+      updateApplyAllVisibility(resultEl);
+    });
   });
 
   if (colorSuggestion) {
@@ -113,9 +135,46 @@ function renderReviewResult(resultEl, item, parsed, onChange) {
       await updateItem(item);
       onChange();
       markCardApplied(card);
+      updateApplyAllVisibility(resultEl);
     });
-    card.querySelector('.review-dismiss').addEventListener('click', () => card.remove());
+    card.querySelector('.review-dismiss').addEventListener('click', () => {
+      card.remove();
+      updateApplyAllVisibility(resultEl);
+    });
   }
+
+  resultEl.querySelector('#review-apply-all')?.addEventListener('click', async () => {
+    // Only act on cards still pending (not already individually applied or
+    // dismissed) - re-reading the live DOM avoids double-applying or
+    // reviving something the user already dealt with.
+    const pendingCards = [...resultEl.querySelectorAll('.suggestion-card:not(.applied)')];
+    if (!pendingCards.length) return;
+
+    for (const card of pendingCards) {
+      const field = card.dataset.field;
+      if (field === 'colors') {
+        item.dominantColors = colorSuggestion;
+      } else {
+        const fix = fieldFixes.find((f) => f.field === field);
+        if (fix) item[fix.field] = fix.value ?? fix.suggested;
+      }
+    }
+    await updateItem(item);
+    onChange();
+    pendingCards.forEach(markCardApplied);
+    updateApplyAllVisibility(resultEl);
+  });
+}
+
+function updateApplyAllVisibility(resultEl) {
+  const applyAllRow = resultEl.querySelector('#review-apply-all')?.closest('.btn-row');
+  if (!applyAllRow) return;
+  const pending = resultEl.querySelectorAll('.suggestion-card:not(.applied)').length;
+  applyAllRow.style.display = pending > 1 ? '' : 'none';
+}
+
+function applyAllButtonHtml() {
+  return `<div class="btn-row" style="margin-bottom:2px;"><button class="btn btn-primary btn-block" id="review-apply-all">Apply all</button></div>`;
 }
 
 function fieldCardHtml(c) {
