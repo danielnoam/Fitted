@@ -49,10 +49,39 @@ Run with `npm test` (Node's built-in `node:test` runner, no build step).
 - Hardening `camera.js`'s cancel detection — already documented as
   best-effort, low impact.
 
-## Ideas for later (not started)
+## Next up (not started)
 
-- Full multi-item outfit suggestions (top+bottom+shoes+outerwear) instead of
-  just pairs.
-- Wardrobe search/filter beyond the category chips (color, formality, notes).
+### Features
+
+- [ ] Full outfit builder, not just pairs — extend `matcher.js`'s pairwise
+      scoring into a "build a full fit" mode (top + bottom + shoes +
+      optional outerwear/accessory) across 3-4 slots at once.
+- [ ] Wardrobe search/filter beyond the category chips — filter by color,
+      formality, or pattern; text search over notes/subCategory.
+- [ ] Outfit history / "worn today" log — track what was actually worn, to
+      avoid repeats and eventually surface "you haven't worn this in months."
+- [ ] Seasons/weather tagging — same mechanism as the existing formality
+      field/AI-suggest button, gates suggestions by season.
+
+### Quality/UX polish
+
+- [ ] Consistent empty/loading states across the app — the `#suggest-more`
+      flow and AI settings screen should use the same skeleton/loading
+      treatment already used elsewhere.
+- [ ] Undo for delete — item deletion (wardrobe detail, cleanup-scan
+      duplicates) is immediate behind only a `confirm()`; add a brief "Undo"
+      toast, especially since there's no export/backup yet.
+- [ ] Accessibility pass — color-swatch-only UI (category badges, formality
+      pills) needs more than a hover `title` for touch/screen-reader users.
+
+### Technical
+
+- [ ] CI — a GitHub Actions workflow running `npm test` on push/PR, since
+      nothing runs the test suite automatically yet.
+- [ ] Lint/format config (ESLint + Prettier or Biome) now that there's a
+      `package.json` — would catch things like unused imports before they ship.
+
+## Also considered, not queued
+
 - Export/import wardrobe data (JSON backup, since everything lives in
   per-browser IndexedDB with no sync).
