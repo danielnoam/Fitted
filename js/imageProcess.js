@@ -3,8 +3,11 @@
 
 import { rgbToHsl, isNeutral, hueDistance } from './colorMatch.js';
 
-const THUMB_MAX_DIM = 300;
-const THUMB_QUALITY = 0.7;
+// Long enough edge to still look sharp filling most of a phone's width in
+// the detail view (previously 300px, which was fine for a grid card but
+// blurry once stretched across the full screen).
+const THUMB_MAX_DIM = 900;
+const THUMB_QUALITY = 0.85;
 
 export function loadImageFromFile(file) {
   return new Promise((resolve, reject) => {
@@ -29,6 +32,8 @@ function drawResized(img, maxDim) {
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(img, 0, 0, w, h);
   return { canvas, ctx, w, h };
 }
