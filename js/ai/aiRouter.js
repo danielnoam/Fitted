@@ -4,6 +4,7 @@
 import * as gemini from './providerGemini.js';
 import * as claude from './providerClaude.js';
 import * as gpt from './providerGPT.js';
+import { FORMALITY_LEVELS } from '../matcher.js';
 
 export const PROVIDERS = {
   gemini: { id: 'gemini', label: 'Gemini', module: gemini },
@@ -51,4 +52,17 @@ export async function sendMessage({ provider, apiKey, systemPrompt, messages, im
   }
 
   return entry.module.sendMessage({ apiKey, systemPrompt, messages, image: imagePayload });
+}
+
+const FORMALITY_PROMPT = `Look at this clothing item photo. How dressy or casual does it read? Reply with exactly one word from this list, nothing else, no punctuation: ${FORMALITY_LEVELS.join(', ')}.`;
+
+/**
+ * Ask the AI to classify a single item's photo into one of matcher.js's
+ * fixed formality levels. Returns the matched level string, or null if the
+ * reply couldn't be mapped to one of the known levels.
+ */
+export async function classifyFormality({ provider, apiKey, image }) {
+  const reply = await sendMessage({ provider, apiKey, messages: [{ role: 'user', content: FORMALITY_PROMPT }], image });
+  const normalized = reply.trim().toLowerCase().replace(/[^a-z-]/g, '');
+  return FORMALITY_LEVELS.includes(normalized) ? normalized : null;
 }

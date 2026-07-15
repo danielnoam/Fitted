@@ -2,6 +2,7 @@ import { pickImage } from '../camera.js';
 import { processImageFile } from '../imageProcess.js';
 import { addItem, uuid } from '../storage.js';
 import { openMatchResults } from './matchView.js';
+import { formalityFieldHtml, wireFormalityField } from './formalityField.js';
 
 const CATEGORIES = ['top', 'bottom', 'outerwear', 'shoes', 'accessory'];
 
@@ -67,6 +68,8 @@ function renderForm(overlay, file, analysis) {
       <input type="text" id="cap-subcategory" placeholder="e.g. t-shirt, sneakers" />
     </div>
 
+    ${formalityFieldHtml('cap', null)}
+
     <div class="field">
       <label for="cap-notes">Notes (optional)</label>
       <textarea id="cap-notes" placeholder="Anything worth remembering about this piece"></textarea>
@@ -89,6 +92,8 @@ function renderForm(overlay, file, analysis) {
     body.querySelector('#cap-error').style.display = 'block';
   };
 
+  wireFormalityField(body, 'cap', () => analysis.thumbnail, () => {});
+
   function buildItem() {
     return {
       category: getCategory(),
@@ -96,6 +101,7 @@ function renderForm(overlay, file, analysis) {
       thumbnail: analysis.thumbnail,
       dominantColors: analysis.dominantColors,
       pattern: analysis.pattern,
+      formality: body.querySelector('#cap-formality').value || null,
       notes: body.querySelector('#cap-notes').value.trim(),
     };
   }

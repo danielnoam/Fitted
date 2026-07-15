@@ -1,6 +1,7 @@
 import { getAllItems, deleteItem, updateItem } from '../storage.js';
 import { openMatchResults } from './matchView.js';
 import { openItemChat } from './aiChatView.js';
+import { formalityFieldHtml, wireFormalityField } from './formalityField.js';
 
 const CATEGORIES = ['top', 'bottom', 'outerwear', 'shoes', 'accessory'];
 
@@ -103,6 +104,7 @@ export function openItemDetail(item, { onChange } = {}) {
       </div>
       <div class="detail-meta-row">${renderSwatches(item.dominantColors, 'lg')}</div>
       ${item.notes ? `<p style="color:var(--text-dim);font-size:14px;">${escapeHtml(item.notes)}</p>` : ''}
+      ${formalityFieldHtml('detail', item.formality || null)}
       <div class="btn-row" style="margin-top:20px;">
         <button class="btn btn-primary btn-block" id="detail-find-matches">Find matches</button>
       </div>
@@ -128,6 +130,12 @@ export function openItemDetail(item, { onChange } = {}) {
 
   overlay.querySelector('#detail-find-matches').addEventListener('click', () => {
     openMatchResults(item);
+  });
+
+  wireFormalityField(overlay, 'detail', () => item.thumbnail, async (value) => {
+    item.formality = value;
+    await updateItem(item);
+    onChange?.();
   });
 
   overlay.querySelector('#detail-ask-ai').addEventListener('click', () => {

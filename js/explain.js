@@ -1,6 +1,8 @@
 // Templated "why this matches" text generated purely from scorer output.
 // No AI call involved.
 
+import { FORMALITY_LABELS } from './matcher.js';
+
 const COLOR_PHRASES = {
   complementary: 'complementary colors',
   analogous: 'analogous colors',
@@ -24,6 +26,13 @@ function patternPhrase(target, candidate, penalty) {
   return 'both solid';
 }
 
+function formalityPhrase(target, candidate, penalty) {
+  if (penalty <= 0) return null;
+  const a = FORMALITY_LABELS[target.formality] ?? target.formality;
+  const b = FORMALITY_LABELS[candidate.formality] ?? candidate.formality;
+  return `but ${a} vs ${b} may feel mismatched`;
+}
+
 /**
  * Build a short explanation string for a matcher.js scoreMatch() result.
  * `result` is one entry from findMatches(), `target` is the item it was
@@ -33,8 +42,10 @@ export function explainMatch(target, result) {
   const colorPhrase = COLOR_PHRASES[result.colorRelation] ?? COLOR_PHRASES.unknown;
   const catPhrase = categoryPhrase(result.categoryScore);
   const patPhrase = patternPhrase(target, result.item, result.patternPenalty);
+  const formPhrase = formalityPhrase(target, result.item, result.formalityPenalty);
 
-  return `${capitalize(colorPhrase)}, ${catPhrase}, ${patPhrase}.`;
+  const base = `${capitalize(colorPhrase)}, ${catPhrase}, ${patPhrase}`;
+  return formPhrase ? `${base}, ${formPhrase}.` : `${base}.`;
 }
 
 function capitalize(s) {

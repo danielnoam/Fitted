@@ -21,10 +21,24 @@ const CATEGORY_COMPAT = {
 
 const PATTERN_PENALTY = 0.15;
 
+// Dressiness scale, low to high. Unset (null/undefined) on either item
+// skips this factor entirely, so matching stays fully deterministic and
+// works with zero formality tags set - it only kicks in once tagged,
+// whether by hand or via the AI tab's suggestion.
+export const FORMALITY_LEVELS = ['athletic', 'casual', 'smart-casual', 'formal'];
+export const FORMALITY_LABELS = {
+  athletic: 'Athletic',
+  casual: 'Casual',
+  'smart-casual': 'Smart Casual',
+  formal: 'Formal',
+};
+const FORMALITY_PENALTY_PER_GAP = 0.12;
+
 export const WEIGHTS = {
   color: 0.5,
   category: 0.3,
   patternPenalty: PATTERN_PENALTY,
+  formalityPenaltyPerGap: FORMALITY_PENALTY_PER_GAP,
 };
 
 function categoryKey(catA, catB) {
@@ -46,6 +60,18 @@ export function patternPenalty(patternA, patternB) {
 }
 
 /**
+ * Penalty for pairing items at very different dressiness levels (e.g.
+ * athletic shorts with a smart-casual polo). A one-step gap (athletic vs.
+ * casual, casual vs. smart-casual, ...) is treated as fine; only wider gaps
+ * are penalized. Returns 0 if either item has no formality set.
+ */
+export function formalityPenalty(formalityA, formalityB) {
+  if (!formalityA || !formalityB) return 0;
+  const gap = Math.abs(FORMALITY_LEVELS.indexOf(formalityA) - FORMALITY_LEVELS.indexOf(formalityB));
+  return Math.max(0, gap - 1) * FORMALITY_PENALTY_PER_GAP;
+}
+
+/**
  * Score a candidate item against a target item. Returns null if the pair
  * is excluded (same category).
  */
@@ -55,9 +81,10 @@ export function scoreMatch(target, candidate) {
 
   const color = scoreColorHarmony(target.dominantColors, candidate.dominantColors);
   const penalty = patternPenalty(target.pattern, candidate.pattern);
+  const formalityPen = formalityPenalty(target.formality, candidate.formality);
 
   const score =
-    WEIGHTS.color * color.score + WEIGHTS.category * catScore - penalty;
+    WEIGHTS.color * color.score + WEIGHTS.category * catScore - penalty - formalityPen;
 
   return {
     item: candidate,
@@ -66,6 +93,7 @@ export function scoreMatch(target, candidate) {
     colorRelation: color.relation,
     categoryScore: catScore,
     patternPenalty: penalty,
+    formalityPenalty: formalityPen,
   };
 }
 
